@@ -100,20 +100,6 @@ export const creditsLabel = (n: number | null) => (n === null ? "xx credits" : `
 export const totalTodayLabel = () =>
   PRICING.kybBasicCredits === null ? `${PRICING.monitorCredits} + xx credits` : creditsLabel(PRICING.monitorCredits + PRICING.kybBasicCredits);
 
-/** What the analyst decided when they reviewed a change. Recorded in the change log and its CSV export for audit. */
-export type ReviewDecision = "no-action" | "actioned";
-export const DECISION_LABEL: Record<ReviewDecision, string> = {
-  "no-action": "No action needed",
-  actioned: "Actioned",
-};
-export const DECISION_HINT: Record<ReviewDecision, string> = {
-  "no-action": "The change doesn't affect your risk view. Nothing to follow up.",
-  actioned: "You followed up, for example by ordering a fresh report or contacting the customer.",
-};
-
-/** One registry field that differs from the baseline. */
-export type FieldChange = { category: Category; field: string; before: string; after: string };
-
 export type ChangeEvent = {
   id: string;
   monitorId: string;
@@ -122,10 +108,9 @@ export type ChangeEvent = {
   /** Severity under the client's mapping on the day the change was detected. The live mapping can differ later. */
   detectedSeverity: Severity;
   reviewed: boolean;
+  /** Set when a review happens in this Portal session; seeded history carries no reviewer. */
   reviewedBy?: string;
   reviewedAt?: string;
-  decision?: ReviewDecision;
-  note?: string;
 };
 
 export type MonitorStatus = "active" | "stopped" | "inactive";
@@ -411,19 +396,14 @@ function buildEvents(monitorId: string, created: Date, end: Date, r: () => numbe
     while (cats.size < n) cats.add(WEIGHTED[Math.floor(r() * WEIGHTED.length)]);
     const age = (end.getTime() - date.getTime()) / 86400000;
     const categories = CATEGORIES.filter((c) => cats.has(c));
-    events.push(
-      seedReview(
-        {
-          id: `${monitorId}-e${i}`,
-          monitorId,
-          date: iso(date),
-          categories,
-          detectedSeverity: worstSeverity(categories, DEMO_ORG_SEVERITY),
-          reviewed: age > 14 || r() < 0.3,
-        },
-        end,
-      ),
-    );
+    events.push({
+      id: `${monitorId}-e${i}`,
+      monitorId,
+      date: iso(date),
+      categories,
+      detectedSeverity: worstSeverity(categories, DEMO_ORG_SEVERITY),
+      reviewed: age > 14 || r() < 0.3,
+    });
   }
   return events.sort((a, b) => (a.date < b.date ? 1 : -1));
 }
