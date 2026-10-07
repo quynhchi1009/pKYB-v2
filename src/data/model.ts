@@ -227,84 +227,13 @@ const hashSeed = (s: string) => {
 };
 const pickFrom = <T,>(r: () => number, list: readonly T[]) => list[Math.floor(r() * list.length)];
 
-// Demo teammates for seeded review history. Reviews made in this session are recorded as "You".
-const REVIEWERS = ["A. Tan", "M. Lim", "R. Chen", "S. Nair"];
-
-/** Seeded history: reviewed changes carry a reviewer, a date and a decision, drawn from the event id so the main data stays stable. */
-function seedReview(e: ChangeEvent, end: Date): ChangeEvent {
-  if (!e.reviewed) return e;
-  const r = mulberry32(hashSeed(e.id));
-  const at = addDays(new Date(e.date + "T09:00:00"), 1 + Math.floor(r() * 6));
-  return {
-    ...e,
-    reviewedBy: pickFrom(r, REVIEWERS),
-    reviewedAt: iso(at > end ? end : at),
-    decision: r() < 0.84 ? "no-action" : "actioned",
-    note: r() < 0.22 ? pickFrom(r, ["Expected after onboarding call.", "Fresh KYB Basic report ordered and filed.", "Customer confirmed by email.", "Routine filing, no risk impact."]) : undefined,
-  };
-}
-
 const CITY: Record<string, string> = { CN: "Shenzhen", HK: "Hong Kong", SG: "Singapore", AU: "Sydney NSW", NZ: "Auckland", JP: "Tokyo", TH: "Bangkok", MY: "Kuala Lumpur", TW: "Taipei" };
 const CURRENCY: Record<string, string> = { CN: "CNY", HK: "HKD", SG: "SGD", AU: "AUD", NZ: "NZD", JP: "JPY", TH: "THB", MY: "MYR", TW: "TWD" };
 const STREETS = ["Level 12, 88 Harbour Road", "Unit 5, 21 Kingsford Avenue", "18/F, Tower 2, 1 Science Park Road", "Room 1203, 45 Queen's Road", "3 Marina Boulevard, #20-01", "45 Collins Street", "7 Nanhai Avenue, Block B", "2-1 Marunouchi, 9F"];
 const PEOPLE = ["Wei Chen", "Sarah Lim", "Daniel Ong", "Kenji Sato", "Priya Raman", "Tom Walker", "Mei Ling Wong", "Arun Pillai", "Grace Ho", "Liam Brooks"];
 const ACTIVITIES = ["Wholesale of electronic components", "Software development and IT services", "Freight forwarding and logistics", "Retail of household furniture", "Payment processing services", "Import and export trading", "Management consultancy"];
-const STATUS_AFTER = ["Under external administration", "Strike-off action in progress", "In liquidation", "Dormant"];
 
-/**
- * The fields that differ from the baseline for one change. Demo values, derived from the event id.
- * Assumes the change-detection API returns before and after values per field; PRODUCT.md lists this as open.
- */
-export function fieldChanges(e: ChangeEvent, m: Pick<Monitor, "name" | "jurisdiction">): FieldChange[] {
-  const r = mulberry32(hashSeed(e.id + "fields"));
-  const cur = CURRENCY[m.jurisdiction] ?? "USD";
-  const money = (n: number) => `${cur} ${nfDemo.format(n)}`;
-  return e.categories.map((category): FieldChange => {
-    switch (category) {
-      case "Identity":
-        return { category, field: "Registered name", before: m.name.replace(/^\S+/, pickFrom(r, A)), after: m.name };
-      case "Address": {
-        const [a, b] = twoOf(r, STREETS);
-        const city = CITY[m.jurisdiction] ?? "";
-        return { category, field: "Registered address", before: `${a}, ${city}`, after: `${b}, ${city}` };
-      }
-      case "BusinessActivity": {
-        const [a, b] = twoOf(r, ACTIVITIES);
-        return { category, field: "Principal activity", before: a, after: b };
-      }
-      case "Officers": {
-        const [a, b, c] = threeOf(r, PEOPLE);
-        return r() < 0.5
-          ? { category, field: "Directors", before: `${a}, ${b}`, after: `${a}, ${b}, ${c} (appointed)` }
-          : { category, field: "Directors", before: `${a}, ${b}`, after: `${a} (${b} resigned)` };
-      }
-      case "Ownership": {
-        const [a, b] = twoOf(r, PEOPLE);
-        const holdco = `${pickFrom(r, A)} ${pickFrom(r, ["Holdings", "Capital", "Ventures"])} Ltd`;
-        const keep = 40 + Math.floor(r() * 3) * 10;
-        const sold = 15 + Math.floor(r() * 3) * 5;
-        return { category, field: "Shareholders", before: `${a} ${keep}% · ${b} ${100 - keep}%`, after: `${a} ${keep - sold}% · ${b} ${100 - keep}% · ${holdco} ${sold}%` };
-      }
-      case "Capital": {
-        const base = (1 + Math.floor(r() * 9)) * 1_000_000;
-        return { category, field: m.jurisdiction === "CN" ? "Registered capital" : "Issued share capital", before: money(base), after: money(base * pickFrom(r, [2, 2.5, 3, 5])) };
-      }
-      case "Status":
-        return { category, field: "Company status", before: m.jurisdiction === "HK" || m.jurisdiction === "SG" ? "Live" : "Registered", after: pickFrom(r, STATUS_AFTER) };
-      case "AnnualReturn": {
-        const filed = iso(addDays(new Date(e.date + "T00:00:00"), -Math.floor(r() * 10)));
-        const last = iso(addDays(new Date(filed + "T00:00:00"), -365));
-        return { category, field: "Annual return", before: `Last filed ${demoDate(last)}`, after: `Filed ${demoDate(filed)}` };
-      }
-      default: {
-        const [a, b] = twoOf(r, PEOPLE);
-        return { category, field: "Company secretary", before: a, after: b };
-      }
-    }
-  });
-}
 const nfDemo = new Intl.NumberFormat("en-GB");
-const demoDate = (d: string) => new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(d + "T00:00:00"));
 function twoOf<T>(r: () => number, list: readonly T[]): [T, T] {
   const i = Math.floor(r() * list.length);
   const j = (i + 1 + Math.floor(r() * (list.length - 1))) % list.length;
