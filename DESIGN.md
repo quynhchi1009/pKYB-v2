@@ -35,45 +35,45 @@ colors:
   low-cell: "#a9b4bd"
 typography:
   display:
-    fontFamily: "Noto Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Open Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
     fontSize: "44px"
     fontWeight: 600
     lineHeight: 1
     letterSpacing: "-0.03em"
     fontFeature: "tnum"
   headline:
-    fontFamily: "Noto Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Roboto, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
     fontSize: "26px"
     fontWeight: 600
     lineHeight: 1.25
     letterSpacing: "-0.015em"
   title:
-    fontFamily: "Noto Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Roboto, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
     fontSize: "18px"
     fontWeight: 600
     lineHeight: 1.375
   heading:
-    fontFamily: "Noto Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Roboto, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
     fontSize: "16px"
     fontWeight: 600
     lineHeight: 1.4
   body:
-    fontFamily: "Noto Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Open Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.5
   body-dense:
-    fontFamily: "Noto Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Open Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: "Noto Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Open Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
     fontSize: "12px"
     fontWeight: 600
     lineHeight: 1.5
   micro:
-    fontFamily: "Noto Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Open Sans, Noto Sans SC, ui-sans-serif, system-ui, sans-serif"
     fontSize: "11px"
     fontWeight: 600
     lineHeight: 1.4
@@ -194,7 +194,7 @@ Severity is the only status colour. The nine change categories are told apart by
 - Severity is a three-step scale (High red, Medium amber, Low slate). Each step has text, background, border and cell tints.
 - Category identity is a green line icon inside a neutral chip.
 - Hairline borders and small radii (4px controls, 6px panels), and flat surfaces at rest.
-- Noto Sans throughout, with Noto Sans SC for Chinese names, and tabular figures for every count and date.
+- Roboto for headings (h1–h6), Open Sans for all other text, Noto Sans SC for Chinese names, and tabular figures for every count and date.
 
 ## Colors
 
@@ -232,10 +232,10 @@ The palette is a dark navy frame, one green action colour, a cool grey ink and l
 
 ## Typography
 
-**Display Font:** Noto Sans (with Noto Sans SC, ui-sans-serif, system-ui)
-**Body Font:** Noto Sans (with Noto Sans SC, ui-sans-serif, system-ui)
+**Heading Font:** Roboto (variable, with Noto Sans SC, ui-sans-serif, system-ui). Every h1–h6, via a base rule in `index.css` (`--font-heading`).
+**Body Font:** Open Sans (variable, with Noto Sans SC, ui-sans-serif, system-ui). All other text, including the display count, buttons, inputs, tables and labels (`--font-sans`).
 
-**Character:** A single humanist sans in four weights (400, 500, 600, 700) that sets Latin and Simplified Chinese company names with equal weight. Hierarchy comes from size and semibold weight, not from a second family.
+**Character:** Two sans families with distinct jobs. Roboto's tighter, more mechanical forms mark structure (page, section and dialog titles). Open Sans, open and humanist, carries reading and data. Both are variable fonts, so 400–700 render as true weights. Chinese names fall back to Noto Sans SC in both roles. Within each family, hierarchy still comes from size and semibold weight. The family switch only separates headings from content.
 
 ### Hierarchy
 - **Display** (600, 44px, line-height 1, -0.03em, tabular): the triage headline count only ("133 companies with unreviewed changes").
@@ -361,7 +361,7 @@ Confirming a new monitor lands on `/reports/:monitorId`, the KYB Basic report th
 - **Don't** place a visible "Stop" or "Delete" link inline in a table row.
 - **Don't** promise a check cadence: no "checks every N days", no countdowns, no next-check dates.
 - **Don't** add shadows to panels or cards at rest, or use radii larger than 8px.
-- **Don't** introduce a second typeface. Noto Sans with Noto Sans SC covers every role.
+- **Don't** introduce a third typeface, or use Roboto for anything that isn't a heading element. Roboto (headings), Open Sans (everything else) and Noto Sans SC (Chinese) cover every role.
 - **Don't** use amber for anything but Medium severity, including the Inactive status.
 - **Don't** animate layout properties such as `width`; the sidebar collapses without a transition.
 - **Don't** apply an org-wide severity change without showing its impact first.
