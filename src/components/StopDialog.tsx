@@ -2,10 +2,8 @@ import { useStore } from "../state/store";
 import { Button, Dialog, nf } from "./ui";
 
 export function StopDialog({ targets, onClose, onDone }: { targets: Array<{ id: string; name: string }>; onClose: () => void; onDone?: () => void }) {
-  const { stopMonitors, toast, monitors } = useStore();
+  const { stopMonitors, toast } = useStore();
   const single = targets.length === 1;
-  const ids = new Set(targets.map((t) => t.id));
-  const unreviewed = monitors.filter((m) => ids.has(m.id)).reduce((n, m) => n + m.events.filter((e) => !e.reviewed).length, 0);
   const shown = targets.slice(0, 5);
 
   const confirm = () => {
@@ -50,12 +48,6 @@ export function StopDialog({ targets, onClose, onDone }: { targets: Array<{ id: 
           We'll stop checking {single ? "this company's" : "these companies'"} registry record. {single ? "Its" : "Their"} change history and baseline report stay
           available under Order history. Monitoring {single ? "it" : "them"} again means creating a new monitor, with a new baseline report.
         </p>
-        {unreviewed > 0 && (
-          <p className="font-medium text-content-primary">
-            {nf.format(unreviewed)} {unreviewed === 1 ? "change is" : "changes are"} still unreviewed. {unreviewed === 1 ? "It stays" : "They stay"} in the history,
-            unreviewed.
-          </p>
-        )}
       </div>
     </Dialog>
   );

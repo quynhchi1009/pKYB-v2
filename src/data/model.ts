@@ -146,6 +146,15 @@ export const TODAY = new Date("2026-10-06T09:00:00");
 export const iso = (d: Date) => d.toISOString().slice(0, 10);
 export const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86400000);
 
+/**
+ * Marking changes as reviewed is switched off for now (the Portal's job at this stage is to lead to a KYB Basic report),
+ * so "needs attention" is a time window instead of a review state: a change is recent for 30 days after detection.
+ * The review fields on ChangeEvent stay in the model so reviewing can come back without a data change.
+ */
+export const RECENT_DAYS = 30;
+export const RECENT_FROM = iso(addDays(TODAY, -RECENT_DAYS));
+export const isRecent = (e: { date: string }) => e.date >= RECENT_FROM;
+
 function mulberry32(seed: number) {
   return () => {
     seed |= 0;

@@ -49,6 +49,7 @@ Two positioning questions are **open, not decided**:
 - **Announcements:** a modal or prompt on login, and "NEW" tags.
 - **Downstream action:** after a high-priority change, the client downloads a new KYB Basic report.
 - **Other views:** an activity feed (reverse-chronological change events) and a case board (New / Reviewing / Actioned / No action needed) are in the requirements. The case board is an open question.
+- **Review decisions (off for now, decided 2026-10-08):** the Portal does not mark changes as reviewed. At this stage pKYB's job is to lead the client to a fresh KYB Basic report, so each company page has that as its one primary action. "Needs attention" means a change detected in the last 30 days, not an unreviewed one. The review fields stay in the data model so reviewing can return later.
 
 ## Capabilities and Constraints
 

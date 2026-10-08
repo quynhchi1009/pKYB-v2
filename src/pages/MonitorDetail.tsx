@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, CircleAlert, CirclePause, Download, Ellipsis, FileCheck2, LoaderCircle, Radar, SlidersHorizontal, X } from "lucide-react";
-import { CATEGORY_LABEL, CATEGORY_SECTION, PRICING, SEVERITY_RANK, TODAY, addDays, creditsLabel, iso, jurisdictionByCode, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
+import { ArrowLeft, ChevronLeft, ChevronRight, CircleAlert, CirclePause, Download, Ellipsis, FileCheck2, LoaderCircle, Radar, SlidersHorizontal, X } from "lucide-react";
+import { CATEGORY_LABEL, CATEGORY_SECTION, PRICING, RECENT_DAYS, SEVERITY_RANK, TODAY, addDays, creditsLabel, isRecent, iso, jurisdictionByCode, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
 import { useStore } from "../state/store";
 import { Heatmap } from "../components/Heatmap";
 import { StopDialog } from "../components/StopDialog";
@@ -24,7 +24,7 @@ export function MonitorDetail() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { monitors, severity, reviewWithUndo, toast, reports, requestReport, queue } = useStore();
+  const { monitors, severity, toast, reports, requestReport, queue } = useStore();
   const m = monitors.find((x) => x.id === id);
   const [stopping, setStopping] = useState(false);
   const [creating, setCreating] = useState<Company | null>(null);
@@ -68,25 +68,22 @@ export function MonitorDetail() {
 
   const j = jurisdictionByCode[m.jurisdiction];
   const active = m.status === "active";
-  // Review queue: the list this company was opened from. "Next" skips companies already fully reviewed.
+  // The list this company was opened from, so the analyst can step through it.
   const pos = queue ? queue.ids.indexOf(m.id) : -1;
   const inQueue = pos >= 0;
-  const hasUnreviewed = (id: string) => monitors.find((x) => x.id === id)?.events.some((e) => !e.reviewed);
-  const nextId = inQueue ? queue!.ids.slice(pos + 1).find(hasUnreviewed) ?? queue!.ids[pos + 1] : undefined;
+  const nextId = inQueue ? queue!.ids[pos + 1] : undefined;
   const prevId = inQueue && pos > 0 ? queue!.ids[pos - 1] : undefined;
-  const nextUnreviewed = inQueue ? queue!.ids.slice(pos + 1).find(hasUnreviewed) : undefined;
-  const nextName = nextUnreviewed && monitors.find((x) => x.id === nextUnreviewed)?.name;
   const backTo = inQueue && queue!.search ? `/pkyb/monitoring?${queue!.search}` : "/pkyb/monitoring";
-  const unreviewed = m.events.filter((e) => !e.reviewed);
-  const lead = unreviewed.length
-    ? [...unreviewed].sort((a, b) => SEVERITY_RANK[worstSeverity(b.categories, severity)] - SEVERITY_RANK[worstSeverity(a.categories, severity)] || (a.date < b.date ? 1 : -1))[0]
-    : null;
+  // The lead is the most severe recent change, newest first among equals; with nothing recent, the latest change.
+  const recent = m.events.filter(isRecent);
+  const lead = recent.length
+    ? [...recent].sort((a, b) => SEVERITY_RANK[worstSeverity(b.categories, severity)] - SEVERITY_RANK[worstSeverity(a.categories, severity)] || (a.date < b.date ? 1 : -1))[0]
+    : (m.events[0] ?? null);
   const leadSev = lead ? worstSeverity(lead.categories, severity) : null;
   const log = day ? m.events.filter((e) => e.date === day) : m.events;
   const pages = Math.max(1, Math.ceil(log.length / LOG_PAGE));
   const reportState = reports[m.id];
   const price = creditsLabel(PRICING.kybBasicCredits);
-  const review = (eventId: string) => reviewWithUndo([eventId], undefined, m.name);
   const freshReport = (variant: "primary" | "secondary") =>
     reportState === "generating" ? (
       <Button variant={variant} disabled aria-live="polite">
@@ -153,7 +150,7 @@ export function MonitorDetail() {
           <ArrowLeft className="size-4" /> Back to {inQueue ? queue!.label : "Monitoring"}
         </Link>
         {inQueue && (
-          <nav aria-label="Review queue" className="flex items-center gap-1 text-[13px] text-content-main">
+          <nav aria-label="Company list" className="flex items-center gap-1 text-[13px] text-content-main">
             <span className="mr-1 tnum">
               {nf.format(pos + 1)} of {nf.format(queue!.ids.length)}
             </span>
@@ -163,7 +160,7 @@ export function MonitorDetail() {
         )}
       </div>
 
-      <header className="mt-4 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+      <header className="mt-4 flex items-start justify-between gap-x-4">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em]">{m.name}</h1>
@@ -177,8 +174,7 @@ export function MonitorDetail() {
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {!lead && m.events.length > 0 && freshReport("secondary")}
+        <div className="flex shrink-0 items-center gap-2">
           {active && (
             <Menu
               label="More monitor actions"
@@ -230,7 +226,7 @@ export function MonitorDetail() {
                   </h2>
                 </div>
                 <p className="mt-2 max-w-[62ch] text-[14px] text-content-main">
-                  {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated. Nothing to review yet."} Checks run automatically, and you'll be alerted in-app and by
+                  {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."} Checks run automatically, and you'll be alerted in-app and by
                   email based on your{" "}
                   <Link to="/pkyb/settings" className="font-semibold text-content-link hover:underline">
                     severity settings
@@ -245,7 +241,7 @@ export function MonitorDetail() {
                 <EventSeverity event={lead} />
                 <span className="text-[13px] text-content-main">
                   Detected {formatDate(lead.date)}
-                  {unreviewed.length > 1 && ` · ${unreviewed.length - 1} more unreviewed`}
+                  {recent.length > 1 && ` · ${recent.length - 1} more in the last ${RECENT_DAYS} days`}
                 </span>
               </div>
               <h2 id="lead-h" className="mt-3 text-[18px] leading-snug font-semibold tracking-[-0.01em]">
@@ -267,41 +263,15 @@ export function MonitorDetail() {
                 </ul>
               </div>
               <p className="mt-3 max-w-[64ch] text-[13px] text-content-tertiary">
-                pKYB tells you which part of the record changed. The fresh report shows the current values to compare with your baseline. Marking a change as reviewed
-                records your name and the date in the change log.
+                pKYB tells you which part of the record changed. The fresh report shows the current values to compare with your baseline.
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 {freshReport("primary")}
-                <Button variant="secondary" onClick={() => review(lead.id)} className="max-sm:w-full">
-                  <Check className="size-4" /> Mark as reviewed
-                </Button>
                 {reportState === "ready" && <span className="text-[12px] text-interactive-primary">Ready · generated {formatDate(iso(TODAY))}</span>}
               </div>
             </section>
-          ) : (
-            <section className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[6px] border border-border-subtle bg-white px-5 py-4">
-              <Check className="size-5 shrink-0 text-interactive-primary" aria-hidden />
-              <p className="min-w-0 flex-1 text-[14px]">
-                <span className="font-semibold">All changes reviewed.</span>{" "}
-                {inQueue && !nextUnreviewed ? (
-                  <span className="text-content-main">That was the last company to review in {queue!.label}.</span>
-                ) : (
-                  <span className="text-content-main">Latest detected {formatDate(m.events[0].date)}.</span>
-                )}
-              </p>
-              {inQueue &&
-                (nextUnreviewed ? (
-                  <Button variant="primary" onClick={() => navigate(`/pkyb/monitoring/${nextUnreviewed}`)}>
-                    Next: {nextName} <ArrowRight className="size-4" />
-                  </Button>
-                ) : (
-                  <Button variant="secondary" onClick={() => navigate(backTo)}>
-                    Back to {queue!.label}
-                  </Button>
-                ))}
-            </section>
-          )}
+          ) : null}
 
           {m.events.length > 0 && (
             <>
@@ -364,13 +334,6 @@ export function MonitorDetail() {
                               <EventSeverity event={e} size="sm" />
                               <span className="text-[13px] tnum text-content-main">{formatDate(e.date)}</span>
                             </span>
-                            {e.reviewed ? (
-                              <span className="text-[12px] text-content-tertiary">{e.reviewedBy ? `Reviewed by ${e.reviewedBy.toLowerCase() === "you" ? "you" : e.reviewedBy} · ${formatDate(e.reviewedAt!)}` : "Reviewed"}</span>
-                            ) : (
-                              <button onClick={() => review(e.id)} className="-mr-2 inline-flex h-9 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
-                                Mark reviewed
-                              </button>
-                            )}
                           </div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {e.categories.map((c) => (
@@ -381,13 +344,12 @@ export function MonitorDetail() {
                       ))}
                     </ul>
                     <div className="overflow-x-auto max-md:hidden">
-                      <table className="w-full min-w-[620px] text-left text-[13px]">
+                      <table className="w-full min-w-[520px] text-left text-[13px]">
                         <thead className="border-b border-border-subtle text-[12px] text-content-main">
                           <tr>
                             <th className="px-5 py-2.5 font-semibold">Detected</th>
                             <th className="px-3 py-2.5 font-semibold">Severity</th>
-                            <th className="px-3 py-2.5 font-semibold">Change category</th>
-                            <th className="px-5 py-2.5 text-right font-semibold">Review</th>
+                            <th className="px-3 pr-5 py-2.5 font-semibold">Change category</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border-subtle">
@@ -397,21 +359,12 @@ export function MonitorDetail() {
                               <td className="px-3 py-3">
                                 <EventSeverity event={e} size="sm" />
                               </td>
-                              <td className="px-3 py-3">
+                              <td className="px-3 pr-5 py-3">
                                 <span className="flex flex-wrap gap-1.5">
                                   {e.categories.map((c) => (
                                     <CategoryChip key={c} category={c} />
                                   ))}
                                 </span>
-                              </td>
-                              <td className="px-5 py-1.5 text-right whitespace-nowrap">
-                                {e.reviewed ? (
-                                  <span className="text-[12px] text-content-tertiary">{e.reviewedBy ? `Reviewed by ${e.reviewedBy.toLowerCase() === "you" ? "you" : e.reviewedBy} · ${formatDate(e.reviewedAt!)}` : "Reviewed"}</span>
-                                ) : (
-                                  <button onClick={() => review(e.id)} className="-mr-2 inline-flex h-8 items-center px-2 text-[12px] font-semibold text-content-link hover:underline">
-                                    Mark reviewed
-                                  </button>
-                                )}
                               </td>
                             </tr>
                           ))}

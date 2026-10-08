@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bell, ChevronDown, RotateCcw } from "lucide-react";
-import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, SEVERITIES, SEVERITY_LABEL, worstSeverity, type Severity, type SeverityMap } from "../data/model";
+import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, SEVERITIES, SEVERITY_LABEL, isRecent, worstSeverity, type Severity, type SeverityMap } from "../data/model";
 import { buildRow } from "../data/queue";
 import { useStore, type NotifyPrefs } from "../state/store";
 import { Button, CATEGORY_ICON, SEV_STYLE, cx, formatDate, nf } from "../components/ui";
@@ -37,7 +37,7 @@ export function SeveritySettings() {
       if (m.status !== "active") continue;
       if (mappingChanged && m.events.length && buildRow(m, severity).latestSev !== buildRow(m, draftMap).latestSev) companies++;
       for (const e of m.events) {
-        if (e.reviewed) continue;
+        if (!isRecent(e)) continue;
         if (prefs.inApp[worstSeverity(e.categories, severity)]) before++;
         if (draft.inApp[worstSeverity(e.categories, draftMap)]) after++;
       }

@@ -8,9 +8,11 @@ import {
   SEVERITIES,
   SEVERITY_LABEL,
   SEVERITY_RANK,
+  RECENT_DAYS,
   STATUS_COPY,
   TODAY,
   addDays,
+  isRecent,
   iso,
   jurisdictionByCode,
   worstSeverity,
@@ -25,11 +27,11 @@ import { applyFilters, buildRow, describeFilters, filtersFromParams, type Filter
 import { Heatmap } from "../components/Heatmap";
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
-import { Button, CategoryChip, Dialog, EventSeverity, Flag, Menu, SEV_STYLE, Select, SeverityPill, cx, formatDate, formatDateLong, nf } from "../components/ui";
+import { Button, CategoryChip, EventSeverity, Flag, Menu, SEV_STYLE, Select, cx, formatDate, formatDateLong, nf } from "../components/ui";
 
 type Tab = "active" | "feed" | "history";
 type Update = (patch: Record<string, string | null>) => void;
-const FILTER_KEYS = ["q", "jur", "sev", "cat", "unrev", "sort", "day", "status", "rev", "alerts"];
+const FILTER_KEYS = ["q", "jur", "sev", "cat", "recent", "sort", "day", "status", "alerts"];
 const TABS: Array<[Tab, string, string]> = [
   ["active", "Active monitors", "Active"],
   ["feed", "Change feed", "Feed"],
@@ -74,17 +76,16 @@ export function Monitoring() {
   const triage = useMemo(() => {
     const by: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
     let companies = 0;
-    for (const r of rows) if (r.unreviewedSev) (by[r.unreviewedSev]++, companies++);
-    const since = iso(addDays(TODAY, -30));
+    for (const r of rows) if (r.recentSev) (by[r.recentSev]++, companies++);
     const heatSince = iso(addDays(TODAY, -26 * 7));
     let recent = 0;
     let peak = 1;
-    // The heatmap shares the headline's lens: unreviewed High changes, so it lightens as the queue shrinks.
+    // The heatmap shares the headline's lens: High changes, so a busy stretch stands out.
     const highByDay = new Map<string, number>();
     for (const r of rows)
       for (const e of r.m.events) {
-        if (e.date >= since) recent++;
-        if (e.reviewed || worstSeverity(e.categories, severity) !== "high") continue;
+        if (isRecent(e)) recent++;
+        if (worstSeverity(e.categories, severity) !== "high") continue;
         const n = (highByDay.get(e.date) ?? 0) + 1;
         highByDay.set(e.date, n);
         if (e.date >= heatSince && n > peak) peak = n;
@@ -94,12 +95,12 @@ export function Monitoring() {
   // The ramp scales to the busiest day on screen, so it never saturates into one flat colour.
   const rampStep = (n: number) => (n === 0 ? 0 : n <= triage.peak / 3 ? 1 : n <= (2 * triage.peak) / 3 ? 2 : 3);
 
-  // Start at the most severe unreviewed company and walk down: the queue is every unreviewed company, High first.
+  // Start at the most severe recent company and walk down: the queue is every company that changed recently, High first.
   const firstSeverity = triage.by.high ? "High" : triage.by.medium ? "Medium" : triage.by.low ? "Low" : null;
-  const startReview = () => {
-    const list = applyFilters(rows, { q: "", jur: "all", sev: "all", cat: "all", unrev: true, sort: "severity" });
+  const startQueue = () => {
+    const list = applyFilters(rows, { q: "", jur: "all", sev: "all", cat: "all", recent: true, sort: "severity" });
     if (!list.length) return;
-    setQueue({ ids: list.map((r) => r.m.id), label: "Needs review", search: "unrev=1" });
+    setQueue({ ids: list.map((r) => r.m.id), label: "Recent changes", search: "recent=1" });
     navigate(`/pkyb/monitoring/${list[0].m.id}`);
   };
   const f = filtersFromParams(params);
@@ -128,20 +129,20 @@ export function Monitoring() {
       <section aria-label="Triage" className="mt-6 grid overflow-hidden rounded-[6px] border border-border-subtle bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.4fr)]">
         <div className="flex flex-col justify-between gap-5 p-5 lg:p-6">
           <div>
-            <p className="text-[13px] font-semibold text-content-main">Needs review</p>
+            <p className="text-[13px] font-semibold text-content-main">Changed in the last {RECENT_DAYS} days</p>
             <p className="mt-1 flex items-baseline gap-2">
               <span className="text-[44px] leading-none font-semibold tracking-[-0.03em] tnum">{nf.format(triage.companies)}</span>
-              <span className="text-[14px] text-content-main">companies with unreviewed changes</span>
+              <span className="text-[14px] text-content-main">{triage.companies === 1 ? "company" : "companies"}</span>
             </p>
             {/* The chips are the severity filter for the table below: press one to narrow to it, press it again to clear. */}
-            <div role="group" aria-label="Filter companies by their most severe unreviewed change" className="mt-4 flex flex-wrap gap-2">
+            <div role="group" aria-label={`Filter companies by their most severe change in the last ${RECENT_DAYS} days`} className="mt-4 flex flex-wrap gap-2">
               {(["high", "medium", "low"] as Severity[]).map((s) => {
                 const pressed = tab === "active" && f.sev === s;
                 return (
                   <button
                     key={s}
                     aria-pressed={pressed}
-                    onClick={() => (pressed ? update({ sev: null }) : update({ tab: null, unrev: "1", sev: s }))}
+                    onClick={() => (pressed ? update({ sev: null }) : update({ tab: null, recent: "1", sev: s }))}
                     className={cx(
                       "inline-flex h-8 items-center gap-2 rounded-full border px-3 text-[13px] transition-colors hover:brightness-[0.97] max-sm:h-10",
                       SEV_STYLE[s].bg,
@@ -158,18 +159,18 @@ export function Monitoring() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <Button variant="primary" onClick={startReview} disabled={!firstSeverity}>
-              {firstSeverity ? `Review ${firstSeverity} first` : "Nothing to review"} {firstSeverity && <ArrowRight className="size-4" />}
+            <Button variant="primary" onClick={startQueue} disabled={!firstSeverity}>
+              {firstSeverity ? `Start with ${firstSeverity}` : `No changes in the last ${RECENT_DAYS} days`} {firstSeverity && <ArrowRight className="size-4" />}
             </Button>
             <dl className="text-[13px]">
-              <dt className="text-content-tertiary">Changes, last 30 days</dt>
+              <dt className="text-content-tertiary">Changes, last {RECENT_DAYS} days</dt>
               <dd className="font-semibold tnum">{nf.format(triage.recent)}</dd>
             </dl>
           </div>
         </div>
         <div className="border-t border-border-subtle bg-base-contrast/60 p-5 lg:border-t-0 lg:border-l lg:p-6">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-[13px] font-semibold text-content-main">Unreviewed High-severity changes per day · last 26 weeks</p>
+            <p className="text-[13px] font-semibold text-content-main">High-severity changes per day · last 26 weeks</p>
             <span className="flex items-center gap-1.5 text-[11px] text-content-tertiary">
               None
               {HIGH_RAMP.map((c) => (
@@ -182,19 +183,19 @@ export function Monitoring() {
             weeks={26}
             size={13}
             gap={3}
-            ariaLabel="Unreviewed High-severity changes per day across your portfolio"
+            ariaLabel="High-severity changes per day across your portfolio"
             selected={tab === "feed" && f.sev === "high" ? day : null}
-            onSelect={(d) => update(d ? { day: d, tab: "feed", sev: "high", rev: null, alerts: null } : { day: null })}
+            onSelect={(d) => update(d ? { day: d, tab: "feed", sev: "high", alerts: null } : { day: null })}
             cell={(d) => {
               const n = triage.highByDay.get(d) ?? 0;
               return {
                 fill: HIGH_RAMP[rampStep(n)],
-                label: `${n === 0 ? "No" : n} unreviewed High-severity change${n === 1 ? "" : "s"} · ${formatDate(d)}`,
+                label: `${n === 0 ? "No" : n} High-severity change${n === 1 ? "" : "s"} · ${formatDate(d)}`,
                 active: n > 0,
               };
             }}
           />
-          <p className="mt-2 text-[12px] text-content-tertiary">Select a day to open its unreviewed High changes in the feed.</p>
+          <p className="mt-2 text-[12px] text-content-tertiary">Select a day to open its High changes in the feed.</p>
         </div>
       </section>
 
@@ -236,8 +237,6 @@ export function Monitoring() {
             setSev={(v) => update({ sev: v })}
             cat={f.cat}
             setCat={(v) => update({ cat: v })}
-            includeReviewed={params.get("rev") === "1"}
-            setIncludeReviewed={(v) => update({ rev: v ? "1" : null })}
             alertsOnly={params.get("alerts") === "1"}
             clearAlerts={() => update({ alerts: null })}
             search={params.toString()}
@@ -341,34 +340,24 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
   const navigate = useNavigate();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [stopping, setStopping] = useState<Array<{ id: string; name: string }>>([]);
-  const [confirmReview, setConfirmReview] = useState(false);
-  const { q, jur, sev, cat, unrev: onlyUnreviewed, sort } = f;
-  const { reviewWithUndo, setQueue, severity } = useStore();
+  const { q, jur, sev, cat, recent: onlyRecent, sort } = f;
+  const { setQueue, severity } = useStore();
   const setPage = (n: number) => update({ page: n ? String(n) : null });
   const setSort = (v: "severity" | "date") => update({ sort: v === "severity" ? null : v });
 
-  const filtered = useMemo(() => applyFilters(rows, f), [rows, q, jur, sev, cat, onlyUnreviewed, sort]);
-  // Opening a company from here remembers this list as the review queue.
+  const filtered = useMemo(() => applyFilters(rows, f), [rows, q, jur, sev, cat, onlyRecent, sort]);
+  // Opening a company from here remembers this list, so the company page can step through it.
   const remember = () => setQueue({ ids: filtered.map((r) => r.m.id), label: describeFilters(f), search });
   const open = (id: string) => {
     remember();
     navigate(`/pkyb/monitoring/${id}`);
   };
   const pageRows = filtered.slice(page * PAGE, (page + 1) * PAGE);
-  const selectedUnreviewed = useMemo(
-    () => rows.filter((r) => selected.has(r.m.id)).flatMap((r) => r.m.events.filter((e) => !e.reviewed).map((e) => e.id)),
-    [rows, selected],
-  );
   const selectedMix = useMemo(() => {
     const mix: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
-    for (const r of rows) if (selected.has(r.m.id)) for (const e of r.m.events) if (!e.reviewed) mix[worstSeverity(e.categories, severity)]++;
+    for (const r of rows) if (selected.has(r.m.id)) for (const e of r.m.events) if (isRecent(e)) mix[worstSeverity(e.categories, severity)]++;
     return mix;
   }, [rows, selected, severity]);
-  const doReview = () => {
-    reviewWithUndo(selectedUnreviewed, `${nf.format(selectedUnreviewed.length)} changes marked as reviewed`);
-    setSelected(new Set());
-    setConfirmReview(false);
-  };
   const allOnPage = pageRows.length > 0 && pageRows.every((r) => selected.has(r.m.id));
   const someOnPage = pageRows.some((r) => selected.has(r.m.id));
   const toggle = (id: string) =>
@@ -378,19 +367,19 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
       else n.add(id);
       return n;
     });
-  const filtersOn = q || jur !== "all" || sev !== "all" || cat !== "all" || onlyUnreviewed;
+  const filtersOn = q || jur !== "all" || sev !== "all" || cat !== "all" || onlyRecent;
 
   return (
     <>
       {/* Severity is filtered by the triage chips above, so the bar carries no second severity control. */}
       <FilterBar q={q} setQ={(v) => update({ q: v })} jur={jur} setJur={(v) => update({ jur: v })} cat={cat} setCat={(v) => update({ cat: v })}>
         <label className="flex h-9 cursor-pointer items-center gap-2 rounded-[4px] border border-interactive-secondary bg-white px-3 text-[13px] select-none max-sm:h-11">
-          <input type="checkbox" checked={onlyUnreviewed} onChange={(e) => update({ unrev: e.target.checked ? "1" : null })} className="size-4 accent-interactive-primary" />
-          Unreviewed only
+          <input type="checkbox" checked={onlyRecent} onChange={(e) => update({ recent: e.target.checked ? "1" : null })} className="size-4 accent-interactive-primary" />
+          Changed in last {RECENT_DAYS} days
         </label>
         {filtersOn && (
           <button
-            onClick={() => update({ q: null, jur: null, sev: null, cat: null, unrev: null })}
+            onClick={() => update({ q: null, jur: null, sev: null, cat: null, recent: null })}
             className="inline-flex h-9 items-center gap-1 px-1 text-[13px] font-semibold text-content-link hover:underline max-sm:h-11"
           >
             <X className="size-3.5" /> Clear filters
@@ -416,22 +405,13 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
               <button onClick={() => setSelected(new Set())} className="inline-flex h-8 items-center rounded-[4px] px-2 font-semibold text-chrome-content-main hover:bg-chrome-control-hover hover:text-white max-sm:h-10">
                 Clear selection
               </button>
+              {/* Stopping is the only bulk action, so it sits on the bar rather than behind a one-item menu. It still confirms first. */}
               <button
-                disabled={selectedUnreviewed.length === 0}
-                onClick={() => (selectedMix.high > 0 ? setConfirmReview(true) : doReview())}
-                className="inline-flex h-8 items-center gap-1.5 rounded-[4px] bg-white px-3 font-semibold text-content-primary hover:bg-interactive-accent disabled:opacity-50 max-sm:h-10"
+                onClick={() => setStopping(rows.filter((r) => selected.has(r.m.id)).map((r) => ({ id: r.m.id, name: r.m.name })))}
+                className="inline-flex h-8 items-center rounded-[4px] bg-white px-3 font-semibold text-content-primary hover:bg-interactive-accent max-sm:h-10"
               >
-                <Check className="size-4" />
-                {selectedUnreviewed.length ? `Mark ${nf.format(selectedUnreviewed.length)} reviewed` : "Nothing to review"}
+                Stop monitoring {nf.format(selected.size)}…
               </button>
-              <Menu
-                label="More bulk actions"
-                trigger={<Ellipsis className="size-4" />}
-                triggerClassName="grid size-8 place-items-center rounded-[4px] text-chrome-content-main hover:bg-chrome-control-hover hover:text-white max-sm:size-10"
-                items={[
-                  { label: `Stop monitoring ${nf.format(selected.size)}`, danger: true, onSelect: () => setStopping(rows.filter((r) => selected.has(r.m.id)).map((r) => ({ id: r.m.id, name: r.m.name }))) },
-                ]}
-              />
             </span>
           </div>
         )}
@@ -446,8 +426,7 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
                 </button>
                 <Link to={`/pkyb/monitoring/${r.m.id}`} onClick={remember} className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
-                    {r.unreviewed > 0 && <span className="size-2 shrink-0 rounded-full bg-background-system" aria-label={`${r.unreviewed} unreviewed changes`} />}
-                    <span className={cx("truncate text-[14px] text-content-primary", r.unreviewed > 0 ? "font-semibold" : "font-medium")}>{r.m.name}</span>
+                    <span className={cx("truncate text-[14px] text-content-primary", r.recent > 0 ? "font-semibold" : "font-medium")}>{r.m.name}</span>
                   </span>
                   <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-content-tertiary">
                     <Flag code={j.code} /> {j.name} · <span className="tnum">{r.latest ? `Detected ${formatDate(r.latest.date)}` : `Checked ${formatDate(r.m.lastChecked)}`}</span>
@@ -466,12 +445,7 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
                 <Menu
                   label={`More actions for ${r.m.name}`}
                   trigger={<Ellipsis className="size-4" />}
-                  items={[
-                    ...(r.unreviewed
-                      ? [{ label: `Mark ${r.unreviewed} reviewed`, onSelect: () => reviewWithUndo(r.m.events.filter((e) => !e.reviewed).map((e) => e.id)) }]
-                      : []),
-                    { label: "Stop monitoring", danger: true, onSelect: () => setStopping([{ id: r.m.id, name: r.m.name }]) },
-                  ]}
+                  items={[{ label: "Stop monitoring", danger: true, onSelect: () => setStopping([{ id: r.m.id, name: r.m.name }]) }]}
                 />
               </li>
             );
@@ -537,10 +511,9 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
                     </td>
                     <td className="max-w-[300px] px-3 py-3">
                       <span className="flex items-center gap-2">
-                        {r.unreviewed > 0 && <span className="size-2 shrink-0 rounded-full bg-background-system" title={`${r.unreviewed} unreviewed`} aria-label={`${r.unreviewed} unreviewed changes`} />}
-                        <span className={cx("truncate text-[14px] text-content-primary", r.unreviewed > 0 ? "font-semibold" : "font-medium")}>{r.m.name}</span>
+                        <span className={cx("truncate text-[14px] text-content-primary", r.recent > 0 ? "font-semibold" : "font-medium")}>{r.m.name}</span>
                       </span>
-                      <span className={cx("block text-[12px] text-content-tertiary tnum", r.unreviewed > 0 && "pl-4")}>{r.m.regNo}</span>
+                      <span className="block text-[12px] text-content-tertiary tnum">{r.m.regNo}</span>
                     </td>
                     <td className="px-3 py-3.5 whitespace-nowrap">
                       <span className="flex items-center gap-2 text-content-main">
@@ -564,17 +537,12 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
                     <td className="py-2.5 pr-3" onClick={(e) => e.stopPropagation()}>
                       <span className="flex items-center justify-end gap-1">
                         <Link to={`/pkyb/monitoring/${r.m.id}`} onClick={remember} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
-                          {r.unreviewed > 0 ? "Review" : "View"}
+                          View
                         </Link>
                         <Menu
                           label={`More actions for ${r.m.name}`}
                           trigger={<Ellipsis className="size-4" />}
-                          items={[
-                            ...(r.unreviewed
-                              ? [{ label: `Mark ${r.unreviewed} reviewed`, onSelect: () => reviewWithUndo(r.m.events.filter((e) => !e.reviewed).map((e) => e.id)) }]
-                              : []),
-                            { label: "Stop monitoring", danger: true, onSelect: () => setStopping([{ id: r.m.id, name: r.m.name }]) },
-                          ]}
+                          items={[{ label: "Stop monitoring", danger: true, onSelect: () => setStopping([{ id: r.m.id, name: r.m.name }]) }]}
                         />
                       </span>
                     </td>
@@ -597,40 +565,6 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
         </div>
       </div>
       <StopDialog targets={stopping} onClose={() => setStopping([])} onDone={() => setSelected(new Set())} />
-      <Dialog
-        open={confirmReview}
-        onClose={() => setConfirmReview(false)}
-        width={480}
-        labelledBy="confirm-review-title"
-        title={`Mark ${nf.format(selectedUnreviewed.length)} changes as reviewed?`}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmReview(false)} data-autofocus="">
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={doReview}>
-              Mark {nf.format(selectedUnreviewed.length)} reviewed
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3 text-[14px] text-content-main">
-          <p>
-            This includes <span className="font-semibold text-high">{nf.format(selectedMix.high)} High-severity</span>{" "}
-            {selectedMix.high === 1 ? "change" : "changes"} across {nf.format(selected.size)} {selected.size === 1 ? "company" : "companies"}.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {(["high", "medium", "low"] as Severity[]).map((lv) =>
-              selectedMix[lv] ? (
-                <span key={lv} className="inline-flex items-center gap-1.5 text-[13px]">
-                  <SeverityPill level={lv} size="sm" /> <span className="tnum">{nf.format(selectedMix[lv])}</span>
-                </span>
-              ) : null,
-            )}
-          </div>
-          <p>Each review is recorded with your name and today's date in the company's change log.</p>
-        </div>
-      </Dialog>
     </>
   );
 }
@@ -647,8 +581,6 @@ function ChangeFeed({
   setSev,
   cat,
   setCat,
-  includeReviewed,
-  setIncludeReviewed,
   alertsOnly,
   clearAlerts,
   search,
@@ -662,22 +594,18 @@ function ChangeFeed({
   setSev: (v: "all" | Severity) => void;
   cat: string;
   setCat: (v: string) => void;
-  includeReviewed: boolean;
-  setIncludeReviewed: (v: boolean) => void;
-  /** Only unreviewed changes at the severities the analyst gets in-app alerts for: exactly what the bell counts. */
+  /** Only recent changes at the severities the analyst gets in-app alerts for: exactly what the bell counts. */
   alertsOnly: boolean;
   clearAlerts: () => void;
   search: string;
 }) {
   const { severity, prefs } = useStore();
   const [page, setPage] = useState(0);
-  // The feed opens on the work still to do. Reviewed changes are one toggle away.
-  const showReviewed = includeReviewed && !alertsOnly;
   const events = useMemo(() => {
     const out: Array<{ e: ChangeEvent; m: Monitor; s: Severity }> = [];
     for (const r of rows)
       for (const e of r.m.events) {
-        if (!showReviewed && e.reviewed) continue;
+        if (alertsOnly && !isRecent(e)) continue;
         if (day && e.date !== day) continue;
         if (jur !== "all" && r.m.jurisdiction !== jur) continue;
         if (cat !== "all" && !e.categories.includes(cat as never)) continue;
@@ -687,12 +615,11 @@ function ChangeFeed({
         out.push({ e, m: r.m, s });
       }
     return out.sort((a, b) => (a.e.date === b.e.date ? SEVERITY_RANK[b.s] - SEVERITY_RANK[a.s] : a.e.date < b.e.date ? 1 : -1));
-  }, [rows, day, jur, sev, cat, severity, showReviewed, alertsOnly, prefs]);
-  useEffect(() => setPage(0), [day, jur, sev, cat, showReviewed, alertsOnly]);
-  const { reviewWithUndo, setQueue } = useStore();
+  }, [rows, day, jur, sev, cat, severity, alertsOnly, prefs]);
+  useEffect(() => setPage(0), [day, jur, sev, cat, alertsOnly]);
+  const { setQueue } = useStore();
   const rememberFeed = () =>
     setQueue({ ids: [...new Set(events.map((x) => x.m.id))], label: day ? `Change feed · ${formatDate(day)}` : "Change feed", search });
-  const unreviewedHere = useMemo(() => events.filter((x) => !x.e.reviewed).map((x) => x.e.id), [events]);
   const slice = events.slice(page * PAGE, (page + 1) * PAGE);
   const groups: Array<[string, typeof slice]> = [];
   for (const it of slice) {
@@ -704,19 +631,10 @@ function ChangeFeed({
   return (
     <>
       <FilterBar jur={jur} setJur={setJur} sev={sev} setSev={setSev} cat={cat} setCat={setCat}>
-        <label className={cx("flex h-9 items-center gap-2 rounded-[4px] border border-interactive-secondary bg-white px-3 text-[13px] select-none max-sm:h-11", alertsOnly ? "cursor-not-allowed opacity-50" : "cursor-pointer")}>
-          <input type="checkbox" checked={showReviewed} disabled={alertsOnly} onChange={(e) => setIncludeReviewed(e.target.checked)} className="size-4 accent-interactive-primary" />
-          Include reviewed
-        </label>
-        {unreviewedHere.length > 0 && (day || jur !== "all" || sev !== "all" || cat !== "all" || alertsOnly) && (
-          <Button variant="secondary" className="order-last ml-auto" onClick={() => reviewWithUndo(unreviewedHere)}>
-            <Check className="size-4" /> Mark all {nf.format(unreviewedHere.length)} reviewed
-          </Button>
-        )}
         {alertsOnly && (
           <span className="inline-flex h-9 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-1.5 pl-3 text-[13px] font-semibold text-interactive-control">
             Your in-app alerts
-            <button aria-label="Show all unreviewed changes" onClick={clearAlerts} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
+            <button aria-label="Show all changes" onClick={clearAlerts} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
               <X className="size-3.5" />
             </button>
           </span>
@@ -736,7 +654,7 @@ function ChangeFeed({
             <h2 className="sticky top-14 z-[1] border-b border-border-subtle bg-base-contrast px-4 py-2 first:rounded-t-[6px] text-[12px] font-semibold text-content-main">{formatDateLong(date)}</h2>
             <ul className="divide-y divide-border-subtle">
               {items.map(({ e, m }) => (
-                <li key={e.id} className="relative grid gap-2 px-4 py-3 hover:bg-base-contrast sm:grid-cols-[104px_minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+                <li key={e.id} className="relative grid gap-2 px-4 py-3 hover:bg-base-contrast sm:grid-cols-[104px_minmax(0,1fr)] sm:items-center sm:gap-4">
                     <span>
                       <EventSeverity event={e} size="sm" />
                     </span>
@@ -747,7 +665,7 @@ function ChangeFeed({
                           to={`/pkyb/monitoring/${m.id}`}
                           onClick={rememberFeed}
                           title={m.name}
-                          className={cx("truncate text-[14px] hover:underline after:absolute after:inset-0", e.reviewed ? "font-medium text-content-main" : "font-semibold text-content-primary")}
+                          className="truncate text-[14px] font-semibold text-content-primary hover:underline after:absolute after:inset-0"
                         >
                           {m.name}
                         </Link>
@@ -758,16 +676,6 @@ function ChangeFeed({
                         ))}
                       </span>
                     </span>
-                    {e.reviewed ? (
-                      <span className="text-[12px] text-content-tertiary">Reviewed</span>
-                    ) : (
-                      <button
-                        onClick={() => reviewWithUndo([e.id], undefined, m.name)}
-                        className="relative z-[1] inline-flex h-8 w-fit items-center gap-1.5 rounded-[4px] border border-interactive-primary px-3 text-[13px] font-semibold text-interactive-primary hover:bg-interactive-accent max-sm:h-10"
-                      >
-                        <Check className="size-3.5" /> Mark reviewed
-                      </button>
-                    )}
                 </li>
               ))}
             </ul>
@@ -775,13 +683,13 @@ function ChangeFeed({
         ))}
         {events.length === 0 && (
           <div className="px-4 py-14 text-center">
-            <p className="text-[14px] font-semibold">{showReviewed || day || jur !== "all" || sev !== "all" || cat !== "all" || alertsOnly ? "No changes match" : "No unreviewed changes"}</p>
+            <p className="text-[14px] font-semibold">{day || jur !== "all" || sev !== "all" || cat !== "all" || alertsOnly ? "No changes match" : "No changes yet"}</p>
             <p className="mt-1 text-[13px] text-content-main">
               {day
                 ? "Nothing was detected on this day for these filters."
-                : showReviewed || jur !== "all" || sev !== "all" || cat !== "all" || alertsOnly
+                : jur !== "all" || sev !== "all" || cat !== "all" || alertsOnly
                   ? "Adjust the filters to see more of the feed."
-                  : "Everything detected so far has been reviewed. Include reviewed to see the full history."}
+                  : "Registry changes across your monitored companies will be listed here as they're detected."}
             </p>
           </div>
         )}
