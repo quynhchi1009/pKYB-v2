@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowDown, ArrowRight, BellRing, CircleAlert, CircleCheck, FileCheck2, Radar, SlidersHorizontal, X } from "lucide-react";
-import { CATEGORIES, DEFAULT_SEVERITY, PKYB_UNSUPPORTED, PRICING, TODAY, creditsLabel, iso, jurisdictionByCode, totalTodayLabel, type Company, type Severity } from "../data/model";
+import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, PKYB_UNSUPPORTED, PRICING, TODAY, creditsLabel, iso, jurisdictionByCode, totalTodayLabel, type Company, type Severity } from "../data/model";
 import { useStore } from "../state/store";
-import { Button, CategoryChip, Dialog, Flag, cx, formatDate } from "./ui";
+import { Button, CATEGORY_ICON, Dialog, Flag, cx, formatDate } from "./ui";
 
 const STEPS: Array<{ when: string; what: string; icon: typeof Radar }> = [
   { when: "Today", what: "KYB Basic baseline report attached", icon: FileCheck2 },
@@ -52,9 +52,9 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
   };
 
   return (
-    <Dialog open={!!company} onClose={onClose} title={title} width={ordering ? 880 : 720} labelledBy="create-monitor-title" bare>
+    <Dialog open={!!company} onClose={onClose} title={title} width={ordering ? 920 : 720} labelledBy="create-monitor-title" bare>
       {company && j && (
-        <div className="relative grid max-h-[calc(100dvh-32px)] overflow-y-auto md:grid-cols-[300px_minmax(0,1fr)] md:overflow-hidden">
+        <div className="relative grid max-h-[calc(100dvh-32px)] overflow-y-auto md:grid-cols-[340px_minmax(0,1fr)] md:overflow-hidden">
           <button
             onClick={onClose}
             aria-label="Close"
@@ -64,14 +64,16 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
           </button>
 
           {/* Who is being watched and what will happen, in the Portal's navy chrome. */}
-          <aside className="flex flex-col gap-6 bg-[linear-gradient(170deg,var(--color-navy-700),var(--color-navy-900)_60%,var(--color-navy-950))] px-6 pt-6 pb-7 text-white md:pb-8">
-            <h2 id="create-monitor-title" className="pr-10 text-[18px] leading-snug font-semibold tracking-[-0.01em] md:pr-0">
+          <aside className="flex flex-col gap-6 bg-[linear-gradient(170deg,var(--color-navy-700),var(--color-navy-900)_60%,var(--color-navy-950))] px-6 pt-6 pb-7 text-white md:px-7 md:pb-8">
+            {/* 18px bold, a weight step above the semibold company name; one line in the 340px panel on desktop. */}
+            <h2 id="create-monitor-title" className="pr-10 text-[18px] leading-[1.3] font-bold tracking-[-0.015em] text-balance md:pr-0 md:whitespace-nowrap">
               {title}
             </h2>
 
+            {/* The company card: flag beside the name, then a hairline, the registry facts and the status. */}
             <div className="rounded-[6px] bg-chrome-selected p-4 shadow-[inset_0_0_0_1px_var(--color-chrome-border)]">
               <div className="flex items-start gap-3">
-                <Flag code={company.jurisdiction} className="mt-1 h-4 w-6 shrink-0" />
+                <Flag code={company.jurisdiction} className="mt-1.5 h-4 w-6 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-[16px] leading-snug font-semibold">{company.name}</p>
                   {company.localName && <p className="mt-0.5 text-[14px] text-chrome-content-tertiary">{company.localName}</p>}
@@ -81,14 +83,10 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
                 <dt className="text-chrome-content-tertiary">
                   {j.name} · {j.regLabel}
                 </dt>
-                <dd className="mt-0.5 font-medium tnum text-chrome-content-main">{company.regNo}</dd>
+                <dd className="mt-0.5 font-medium tnum break-all text-chrome-content-main">{company.regNo}</dd>
               </dl>
               <p className={cx("mt-3 flex items-start gap-2 text-[13px]", unsupported ? "text-white" : "text-border-accent")}>
-                {unsupported ? (
-                  <CircleAlert className="mt-0.5 size-4 shrink-0 text-chrome-content-main" />
-                ) : (
-                  <CircleCheck className="mt-0.5 size-4 shrink-0" />
-                )}
+                {unsupported ? <CircleAlert className="mt-0.5 size-4 shrink-0 text-chrome-content-main" aria-hidden /> : <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />}
                 {existing
                   ? `Monitored since ${formatDate(existing.createdAt)}`
                   : unsupported
@@ -98,12 +96,12 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
             </div>
 
             {ordering && (
-              <ol aria-label="What happens" className="relative flex flex-col gap-5 max-md:hidden">
+              <ol aria-label="What happens" className="relative flex flex-col gap-5">
                 <span aria-hidden className="absolute top-4 bottom-4 left-[15px] w-px bg-chrome-border" />
                 {STEPS.map((s) => (
                   <li key={s.when} className="relative flex gap-3">
                     <span className="grid size-8 shrink-0 place-items-center rounded-full bg-background-system shadow-[inset_0_0_0_1px_rgb(47_191_135/0.55)]">
-                      <s.icon className="size-4 text-chrome-accent" strokeWidth={1.75} />
+                      <s.icon className="size-4 text-chrome-accent" strokeWidth={1.75} aria-hidden />
                     </span>
                     <span className="pt-1 text-[13px] leading-snug">
                       <span className="block font-semibold text-white">{s.when}</span>
@@ -117,7 +115,7 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
 
           {/* The order itself. */}
           <div className="flex min-h-0 flex-col bg-white">
-            <div className="flex-1 px-6 pt-6 pb-4 md:max-h-[calc(100dvh-32px-76px)] md:overflow-y-auto md:pt-14">
+            <div className="flex-1 px-6 pt-6 pb-5 md:max-h-[calc(100dvh-32px-76px)] md:overflow-y-auto">
               {existing ? (
                 <Note>Already monitored. Opening it uses no credits.</Note>
               ) : unsupported ? (
@@ -125,19 +123,25 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
               ) : (
                 <div className="flex flex-col gap-6">
                   <section aria-labelledby="watch-h">
-                    <h3 id="watch-h" className="text-[16px] font-semibold text-content-primary">
+                    <h3 id="watch-h" className="text-[14px] font-semibold text-content-primary md:pr-10">
                       9 change categories monitored
                     </h3>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {CATEGORIES.map((c) => (
-                        <CategoryChip key={c} category={c} showSeverity={false} />
-                      ))}
-                    </div>
+                    <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-content-main sm:grid-cols-3">
+                      {CATEGORIES.map((c) => {
+                        const Icon = CATEGORY_ICON[c];
+                        return (
+                          <li key={c} className="flex items-center gap-2">
+                            <Icon className="size-4 shrink-0 text-interactive-primary" strokeWidth={1.75} aria-hidden />
+                            {CATEGORY_LABEL[c]}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </section>
 
                   <section aria-labelledby="sev-h" className="border-t border-border-subtle pt-5">
                     <h3 id="sev-h" className="flex items-center gap-2 text-[14px] font-semibold text-content-primary">
-                      <SlidersHorizontal className="size-4 text-interactive-primary" /> Severity
+                      <SlidersHorizontal className="size-4 text-interactive-primary" aria-hidden /> Severity
                     </h3>
                     {customised ? (
                       <p className="mt-1 text-[13px] text-content-main">
@@ -172,7 +176,7 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
                         label={
                           <span className="flex flex-wrap items-center gap-2">
                             KYB Basic report
-                            <span className="rounded-[3px] border border-border-neutral bg-background-subtle px-1.5 text-[11px] font-semibold text-content-main">Required</span>
+                            <span className="rounded-[4px] border border-border-neutral bg-background-subtle px-1.5 text-[11px] font-semibold text-content-main">Required</span>
                           </span>
                         }
                         sub="Your baseline for spotting changes"
@@ -187,14 +191,14 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
               )}
             </div>
 
-            <footer className="flex flex-col gap-3 border-t border-border-subtle bg-white px-6 py-4 sm:flex-row sm:items-center">
+            <footer className="flex flex-col gap-3 border-t border-border-subtle bg-white px-6 py-4 max-md:sticky max-md:bottom-0 max-md:z-[1] sm:flex-row sm:items-center">
               {ordering && (
                 <p className="flex shrink-0 items-baseline gap-2 whitespace-nowrap">
                   <span className="text-[13px] text-content-main">Total today</span>
                   <span className="text-[18px] font-semibold tracking-[-0.01em] tnum text-content-primary">{totalTodayLabel()}</span>
                 </p>
               )}
-              <div className="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2 sm:ml-auto [&>*:last-child]:max-sm:flex-1">
                 {/* An order spends credits, so Enter on open must not place it: Cancel takes focus first. */}
                 <Button variant="ghost" onClick={onClose} data-autofocus={ordering ? "" : undefined}>
                   Cancel
@@ -228,7 +232,7 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
 }
 
 function Note({ children }: { children: ReactNode }) {
-  return <p className="max-w-[48ch] text-[14px] leading-relaxed text-content-main">{children}</p>;
+  return <p className="max-w-[48ch] text-[14px] leading-relaxed text-content-main md:pr-10">{children}</p>;
 }
 
 function Line({ label, sub, value }: { label: ReactNode; sub: string; value: string }) {
@@ -236,7 +240,7 @@ function Line({ label, sub, value }: { label: ReactNode; sub: string; value: str
     <div className="flex items-start justify-between gap-6">
       <dt className="min-w-0">
         <span className="block font-medium text-content-primary">{label}</span>
-        <span className="mt-0.5 block max-w-[46ch] text-[12px] text-content-main">{sub}</span>
+        <span className="mt-0.5 block max-w-[46ch] text-[12px] text-pretty text-content-main tnum">{sub}</span>
       </dt>
       <dd className="shrink-0 pt-px tnum text-content-primary">{value}</dd>
     </div>

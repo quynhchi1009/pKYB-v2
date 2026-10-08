@@ -189,7 +189,7 @@ export function Dialog({
       d.showModal();
       // Children mount before the dialog opens, so React's autoFocus runs on a hidden node and is lost.
       // `data-autofocus` marks the control that should take focus once the dialog is actually showing.
-      d.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+      d.querySelector<HTMLElement>("[data-autofocus]")?.focus({ preventScroll: true });
     }
     if (!open && d.open) d.close();
   }, [open]);
