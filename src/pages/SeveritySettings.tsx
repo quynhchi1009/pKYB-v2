@@ -98,20 +98,17 @@ export function SeveritySettings() {
       <header className="max-w-[72ch]">
         <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em]">Severity & Notification Settings</h1>
         <p className="mt-1 text-[14px] text-content-main">
-          Map each change category to a severity tier. This mapping drives colour-coding across the monitoring table, heatmap and change feed. Changes apply when you save.
+          Choose how serious each type of change is, and when you're notified.
         </p>
       </header>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section aria-labelledby="map-h">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="max-w-[60ch]">
               <h2 id="map-h" className="text-[18px] font-semibold">
                 Category Severity Mapping
               </h2>
-              <p className="mt-0.5 text-[13px] text-content-main">
-                Applies to all your monitors. When one change touches several categories, it takes the most severe tier. Earlier changes keep the severity they had when detected, shown as “was Low”.
-              </p>
             </div>
             <div className="flex items-center gap-1.5">
               {TIERS_HIGH_FIRST.map((s) => (
