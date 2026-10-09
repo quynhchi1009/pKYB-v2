@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowRight, ArrowUpDown, Check, ChevronLeft, ChevronRight, Download, Ellipsis, Plus, Search, Square, SquareCheck, SquareMinus, X } from "lucide-react";
+import { ArrowDown, ArrowUpDown, Check, ChevronLeft, ChevronRight, Download, Ellipsis, Search, Square, SquareCheck, SquareMinus, X } from "lucide-react";
 import {
   CATEGORIES,
   CATEGORY_LABEL,
@@ -43,9 +43,8 @@ const HIGH_RAMP = ["var(--color-background-subtle)", "var(--color-high-ramp-1)",
 const asCompany = (m: Monitor): Company => ({ id: m.id, name: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, status: "Registered" });
 
 export function Monitoring() {
-  const { monitors, severity, setQueue } = useStore();
+  const { monitors, severity } = useStore();
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
   const tab = (params.get("tab") as Tab) || "active";
   // Filters live in the URL so Back from a company page returns to the same view.
   const update: Update = (patch) =>
@@ -95,14 +94,6 @@ export function Monitoring() {
   // The ramp scales to the busiest day on screen, so it never saturates into one flat colour.
   const rampStep = (n: number) => (n === 0 ? 0 : n <= triage.peak / 3 ? 1 : n <= (2 * triage.peak) / 3 ? 2 : 3);
 
-  // Start at the most severe recent company and walk down: the queue is every company that changed recently, High first.
-  const firstSeverity = triage.by.high ? "High" : triage.by.medium ? "Medium" : triage.by.low ? "Low" : null;
-  const startQueue = () => {
-    const list = applyFilters(rows, { q: "", jur: "all", sev: "all", cat: "all", recent: true, sort: "severity" });
-    if (!list.length) return;
-    setQueue({ ids: list.map((r) => r.m.id), label: "Recent changes", search: "recent=1" });
-    navigate(`/pkyb/monitoring/${list[0].m.id}`);
-  };
   const f = filtersFromParams(params);
   const onTabKey = (e: React.KeyboardEvent) => {
     const i = TABS.findIndex(([t]) => t === tab);
@@ -120,9 +111,6 @@ export function Monitoring() {
           <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em]">Monitoring</h1>
           <p className="mt-1 text-[14px] text-content-main">Registry changes across the companies you monitor. Checks run automatically.</p>
         </div>
-        <Button variant="secondary" onClick={() => navigate("/search?from=pkyb")}>
-          <Plus className="size-4" /> New monitor
-        </Button>
       </header>
 
       {/* Triage band: one surface, three jobs, in reading order. */}
@@ -158,10 +146,7 @@ export function Monitoring() {
               })}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <Button variant="primary" onClick={startQueue} disabled={!firstSeverity}>
-              {firstSeverity ? `Start with ${firstSeverity}` : `No changes in the last ${RECENT_DAYS} days`} {firstSeverity && <ArrowRight className="size-4" />}
-            </Button>
+          <div>
             <dl className="text-[13px]">
               <dt className="text-content-tertiary">Changes, last {RECENT_DAYS} days</dt>
               <dd className="font-semibold tnum">{nf.format(triage.recent)}</dd>

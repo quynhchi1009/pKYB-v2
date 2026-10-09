@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Check, FileText, FileUser, Plus, Radar, TextSearch, type LucideIcon } from "lucide-react";
-import { PKYB_UNSUPPORTED, PRICING, SEARCH_COMPANIES, jurisdictionByCode, type Company } from "../data/model";
+import { ArrowRight, BadgeCheck, Check, ChevronDown, CircleHelp, FileText, FileUser, Plus, Radar, TextSearch, type LucideIcon } from "lucide-react";
+import { PKYB_UNSUPPORTED, PRICING, SEARCH_COMPANIES, TODAY, iso, jurisdictionByCode, type Company } from "../data/model";
 import { useStore } from "../state/store";
-import { Button, Flag, NewTag, cx } from "../components/ui";
+import { Button, Flag, NewTag, cx, formatDate } from "../components/ui";
 
 // Ordered from lightest to most complete, so the list reads as a ladder. `parts` is what each report is made of.
 const REPORTS: Array<{ id: string; name: string; parts: string[]; icon: LucideIcon }> = [
@@ -12,7 +12,30 @@ const REPORTS: Array<{ id: string; name: string; parts: string[]; icon: LucideIc
   { id: "basic-ubo", name: "KYB Basic + Direct UBO", parts: ["Lite Report", "In-Depth Business Information", "Direct UBO"], icon: FileUser },
   { id: "complete", name: "KYB Complete", parts: ["Advanced", "AML", "UBO", "Risk Assessment", "Benchmarking"], icon: FileUser },
 ];
-const ADDONS = [{ id: "aml", name: "AML (Company)", desc: "Sanctions, PEP and adverse media screening for the company" }];
+// The Portal's own option lists for the add-ons.
+const MATCH_TYPES = ["Exact Match", "Non-Exact Match"];
+/** Monitoring frequency in days: monthly steps up to six months. */
+const FREQUENCIES = [30, 60, 90, 120, 150, 180];
+// Monitoring add-on expiry: from today up to one year ahead.
+const EXPIRY_MIN = iso(TODAY);
+const EXPIRY_MAX = iso(new Date(TODAY.getFullYear() + 1, TODAY.getMonth(), TODAY.getDate()));
+// The sample sheet's values are invented, so no real company's record is shown as a sample.
+const SAMPLE_ROWS: Array<[string, string]> = [
+  ["Company Name (English)", "Sample Technology Co., Ltd."],
+  ["Company Name (Native)", "样本科技有限公司"],
+  ["Unified Social Credit Code", "91110108MA00SAMP1E"],
+  ["Old registration number", "110108000000000"],
+  ["Organisation Code", "00000000-0"],
+  ["Incorporation Date", "2010-03-03"],
+  ["Company Status", "In operation (opening)"],
+  ["Registration Authority", "District Market Supervision and Administration Bureau"],
+  ["Company Type", "Limited Liability Company"],
+  ["Legal Representative", "Zhang San"],
+  ["Employee Count", "Less than 50 people"],
+  ["Operation Start Date", "2010-03-03"],
+  ["Operation End Date", "No fixed term"],
+  ["Registered Address", "No. 1, Sample Road, Haidian District, Beijing"],
+];
 const PRODUCT_TABS = [
   { id: "kyb", label: "KYB" },
   { id: "ubo", label: "UBO" },
@@ -47,15 +70,31 @@ function ReportPage({ company }: { company: Company }) {
   const [product, setProduct] = useState("kyb");
   const [view, setView] = useState<(typeof VIEW_TABS)[number]>("Configure");
   const [report, setReport] = useState("basic");
-  const [addons, setAddons] = useState<string[]>([]);
+  const [aml, setAml] = useState(false);
+  const [matchType, setMatchType] = useState("");
+  const [monitoring, setMonitoring] = useState(false);
+  const [frequency, setFrequency] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [sampleId, setSampleId] = useState<string | null>(null);
   const [lang, setLang] = useState({ en: false, og: false });
   const [pkyb, setPkyb] = useState(false);
   const selected = REPORTS.find((r) => r.id === report)!;
   const offersPkyb = report === PKYB_REPORT;
   const unsupported = PKYB_UNSUPPORTED.has(company.jurisdiction);
   const addPkyb = offersPkyb && pkyb && !monitor && !unsupported;
-  const ready = lang.en || lang.og;
-  const summary = [selected.name, ...(addons.length ? ["AML (Company)"] : []), ...(addPkyb ? ["pKYB monitoring"] : [])].join(" + ");
+  const sample = REPORTS.find((r) => r.id === (sampleId ?? report))!;
+  const matchName = company.localName ?? company.name;
+  // The first thing still needed before the order can go through, in the order the page asks for it.
+  const missing =
+    aml && !matchType
+      ? "Choose an AML match type to continue."
+      : monitoring && (!frequency || !expiry)
+        ? "Set the monitoring frequency and expiry date to continue."
+        : !(lang.en || lang.og)
+          ? "Choose a language to continue."
+          : null;
+  const ready = !missing;
+  const summary = [selected.name, ...(aml ? ["AML (Company)"] : []), ...(monitoring ? ["Monitoring"] : []), ...(addPkyb ? ["pKYB monitoring"] : [])].join(" + ");
 
   const generate = () => {
     if (addPkyb) {
@@ -153,7 +192,14 @@ function ReportPage({ company }: { company: Company }) {
                               on ? "bg-interactive-selected shadow-[inset_0_0_0_1px_var(--color-interactive-primary)]" : "hover:bg-base-contrast",
                             )}
                           >
-                            <input type="radio" name="report" checked={on} onChange={() => setReport(r.id)} className="mt-0.5 size-4 shrink-0 accent-interactive-primary" />
+                            <input
+                              type="radio"
+                              name="report"
+                              checked={on}
+                              onChange={() => {
+                                setReport(r.id);
+                                setSampleId(null);
+                              }} className="mt-0.5 size-4 shrink-0 accent-interactive-primary" />
                             <r.icon className={cx("mt-px size-[18px] shrink-0", on ? "text-interactive-primary" : "text-content-tertiary")} strokeWidth={1.75} aria-hidden />
                             <span className="min-w-0 flex-1">
                               <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -177,7 +223,8 @@ function ReportPage({ company }: { company: Company }) {
                               type="button"
                               onClick={(e) => {
                                 e.preventDefault();
-                                toast({ title: `${r.name} preview`, body: "Sample reports aren't part of this prototype." });
+                                setSampleId(r.id);
+                                document.getElementById("sample-h")?.scrollIntoView({ behavior: "smooth", block: "start" });
                               }}
                               className="-my-1 shrink-0 rounded-[4px] px-1.5 py-1 text-[13px] font-semibold text-content-link hover:underline"
                             >
@@ -194,29 +241,56 @@ function ReportPage({ company }: { company: Company }) {
                       Report add-ons
                     </h2>
                     <p className="mt-0.5 mb-3 text-[13px] text-content-main">Optional. Added to whichever report you choose.</p>
-                    {ADDONS.map((a) => {
-                      const on = addons.includes(a.id);
-                      return (
-                        <label
-                          key={a.id}
-                          className={cx(
-                            "flex cursor-pointer items-start gap-3.5 rounded-[6px] border px-4 py-3 transition-colors",
-                            on ? "border-interactive-primary bg-interactive-selected" : "border-border-subtle hover:bg-base-contrast",
+                    <div className="flex flex-col gap-3">
+                      <AddOn name="AML (Company)" checked={aml} onChange={setAml} desc={<>Matching based on “<span lang="zh">{matchName}</span>”</>} help="AML screening compares this name with sanctions, PEP and adverse media records. The match type sets how closely a record has to match to be reported.">
+                        <Field label="Match type">
+                          {(id) => (
+                            <SelectBox id={id} value={matchType} onChange={setMatchType} placeholder="Select match type" options={MATCH_TYPES.map((t) => ({ value: t, label: t }))} />
                           )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={on}
-                            onChange={(e) => setAddons((x) => (e.target.checked ? [...x, a.id] : x.filter((y) => y !== a.id)))}
-                            className="mt-0.5 size-4 shrink-0 accent-interactive-primary"
-                          />
-                          <span>
-                            <span className="block text-[14px] font-semibold text-content-primary">{a.name}</span>
-                            <span className="block text-[13px] text-content-main">{a.desc}</span>
-                          </span>
-                        </label>
-                      );
-                    })}
+                        </Field>
+                      </AddOn>
+
+                      <AddOn name="Monitoring" checked={monitoring} onChange={setMonitoring} desc={<>Set a frequent monitor to track changes in “<span lang="zh">{matchName}</span>”</>}>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <Field label="Frequency" hint="How often the monitor runs, in days.">
+                            {(id, hintId) => (
+                              <SelectBox
+                                id={id}
+                                describedBy={hintId}
+                                value={frequency}
+                                onChange={setFrequency}
+                                placeholder="Select frequency"
+                                options={FREQUENCIES.map((d) => ({ value: String(d), label: `${d} (${d / 30} ${d === 30 ? "month" : "months"})` }))}
+                              />
+                            )}
+                          </Field>
+                          <Field label="Expiry date" hint="When the monitor stops, up to 1 year from today.">
+                            {(id, hintId) => (
+                              <input
+                                id={id}
+                                type="date"
+                                aria-describedby={hintId}
+                                min={EXPIRY_MIN}
+                                max={EXPIRY_MAX}
+                                value={expiry}
+                                onChange={(e) => setExpiry(e.target.value)}
+                                className={cx(FIELD, "tnum", !expiry && "text-content-tertiary")}
+                              />
+                            )}
+                          </Field>
+                        </div>
+                      </AddOn>
+                    </div>
+                  </section>
+
+                  <section aria-labelledby="sample-h" className="scroll-mt-[72px]">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border-subtle pb-3">
+                      <h2 id="sample-h" className="text-[16px] font-semibold text-content-primary">
+                        Sample <span className="font-normal text-content-main">({sample.name})</span>
+                      </h2>
+                      <p className="text-[12px] text-content-tertiary">Illustrative values. Your report uses this company's registry record.</p>
+                    </div>
+                    <SampleSheet />
                   </section>
                 </div>
               )}
@@ -249,10 +323,26 @@ function ReportPage({ company }: { company: Company }) {
                 </div>
               )}
 
-              {addons.length > 0 && (
+              {(aml || monitoring) && (
                 <div className="mt-4 border-t border-dashed border-border-subtle pt-3">
                   <p className="text-[12px] font-semibold text-content-main">Add-ons</p>
-                  <p className="mt-1 text-[13px] text-content-primary">AML (Company)</p>
+                  <ul className="mt-1.5 flex flex-col gap-1.5 text-[13px] text-content-primary">
+                    {aml && (
+                      <li className="flex items-baseline justify-between gap-3">
+                        AML (Company)
+                        <span className={cx("text-right text-[12px]", matchType ? "text-content-main" : "text-content-tertiary")}>{matchType || "Match type not set"}</span>
+                      </li>
+                    )}
+                    {monitoring && (
+                      <li className="flex items-baseline justify-between gap-3">
+                        Monitoring
+                        <span className={cx("text-right text-[12px] tnum", frequency && expiry ? "text-content-main" : "text-content-tertiary")}>
+                          {frequency ? `Every ${frequency} days` : "Frequency not set"}
+                          {expiry && ` · until ${formatDate(expiry)}`}
+                        </span>
+                      </li>
+                    )}
+                  </ul>
                 </div>
               )}
             </div>
@@ -287,7 +377,11 @@ function ReportPage({ company }: { company: Company }) {
               <Button disabled={!ready} onClick={() => toast({ title: "Added to cart", body: `${summary} for ${company.name}.` })} className="w-full">
                 Add to cart
               </Button>
-              {!ready && <p className="pt-0.5 text-center text-[12px] text-content-tertiary">Choose a language to continue.</p>}
+              {missing && (
+                <p className="pt-0.5 text-center text-[12px] text-content-tertiary" aria-live="polite">
+                  {missing}
+                </p>
+              )}
             </div>
           </section>
         </aside>
@@ -357,5 +451,150 @@ function PkybOption({
         <span className="mt-0.5 block text-[12px] leading-snug text-content-main">Alerts when the registry record changes. This report becomes the baseline.</span>
       </span>
     </label>
+  );
+}
+
+const FIELD =
+  "h-9 w-full rounded-[4px] border border-interactive-secondary bg-white px-2.5 text-[13px] text-content-primary transition-colors hover:border-content-main focus:border-interactive-primary max-sm:h-11 max-sm:text-[16px]";
+
+/** An optional add-on: a checkbox row that opens its own settings once ticked. */
+function AddOn({
+  name,
+  desc,
+  help,
+  checked,
+  onChange,
+  children,
+}: {
+  name: string;
+  desc: ReactNode;
+  help?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  children: ReactNode;
+}) {
+  const helpId = useId();
+  return (
+    <div className={cx("rounded-[6px] border transition-colors", checked ? "border-interactive-primary" : "border-border-subtle")}>
+      <div className={cx("flex items-start gap-3.5 rounded-t-[6px] px-4 py-3", checked ? "bg-interactive-selected" : "rounded-b-[6px] hover:bg-base-contrast")}>
+        <input
+          id={`${helpId}-cb`}
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          aria-describedby={`${helpId}-desc`}
+          className="mt-0.5 size-4 shrink-0 cursor-pointer accent-interactive-primary"
+        />
+        <span className="min-w-0 flex-1">
+          <label htmlFor={`${helpId}-cb`} className="block cursor-pointer text-[14px] font-semibold text-content-primary">
+            {name}
+          </label>
+          <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[13px] text-content-main">
+            <span id={`${helpId}-desc`}>{desc}</span>
+            {help && (
+              <span className="group relative inline-flex">
+                <button type="button" aria-label={`About ${name}`} aria-describedby={`${helpId}-tip`} className="grid size-6 place-items-center rounded-full text-content-tertiary hover:text-content-primary">
+                  <CircleHelp className="size-4" aria-hidden />
+                </button>
+                <span
+                  id={`${helpId}-tip`}
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-[260px] -translate-x-1/2 rounded-[6px] bg-background-system px-3 py-2 text-[12px] leading-snug text-white shadow-pop group-focus-within:block group-hover:block max-sm:left-auto max-sm:right-0 max-sm:translate-x-0"
+                >
+                  {help}
+                </span>
+              </span>
+            )}
+          </span>
+        </span>
+      </div>
+      {checked && <div className="border-t border-border-subtle px-4 py-4 sm:pl-[46px]">{children}</div>}
+    </div>
+  );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: (id: string, hintId?: string) => ReactNode }) {
+  const id = useId();
+  const hintId = hint ? `${id}-hint` : undefined;
+  return (
+    <div className="min-w-0">
+      <span className="flex items-center gap-2">
+        <label htmlFor={id} className="text-[13px] font-semibold text-content-primary">
+          {label}
+        </label>
+        <span className="inline-flex h-[18px] items-center rounded-[3px] border border-border-neutral px-1.5 text-[11px] font-semibold text-content-main">Required</span>
+      </span>
+      {hint && (
+        <span id={hintId} className="mt-0.5 block text-[12px] text-content-main">
+          {hint}
+        </span>
+      )}
+      <div className="mt-2 max-w-[360px]">{children(id, hintId)}</div>
+    </div>
+  );
+}
+
+function SelectBox({
+  id,
+  describedBy,
+  value,
+  onChange,
+  placeholder,
+  options,
+}: {
+  id: string;
+  describedBy?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <span className="relative block">
+      <select
+        id={id}
+        aria-describedby={describedBy}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cx(FIELD, "appearance-none pr-9", !value && "text-content-tertiary")}
+      >
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value} className="text-content-primary">
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-content-tertiary" aria-hidden />
+    </span>
+  );
+}
+
+/** A miniature of the report's Basic Information page, faded at the foot to show the document carries on. */
+function SampleSheet() {
+  return (
+    <div className="mt-4 rounded-[6px] bg-base-contrast px-3 pt-6 sm:px-10">
+      <div
+        aria-label="Sample report page"
+        role="img"
+        className="mx-auto h-[400px] max-w-[540px] overflow-hidden border border-b-0 border-border-subtle bg-white px-6 pt-7 [mask-image:linear-gradient(to_bottom,#000_62%,transparent)] sm:px-9"
+      >
+        <div className="flex items-end justify-between gap-4 border-b border-border-subtle pb-2.5">
+          <p className="text-[16px] font-semibold text-interactive-primary">Company Information</p>
+          <BadgeCheck className="size-7 text-interactive-primary" strokeWidth={1.75} aria-hidden />
+        </div>
+        <p className="mt-3 mb-2 text-[11px] font-semibold text-content-primary">Basic Information</p>
+        <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-x-4 gap-y-[7px] text-[11px] leading-snug">
+          {SAMPLE_ROWS.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="font-semibold text-content-main">{k}</dt>
+              <dd className="text-content-primary tnum">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
   );
 }
