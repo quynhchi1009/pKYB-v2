@@ -28,6 +28,30 @@
         ],
         "createdAt": "2026-10-08T02:38:26.313Z",
         "reason": "Claude: compact inline tags (New/Adjusted, contrast chips) at 10.5-11px text use 2px 7px padding, matching the Portal's own New tag in DESIGN.md."
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "24px",
+        "createdAt": "2026-10-09T09:04:21.414Z",
+        "reason": "Agent: DESIGN.md Hierarchy documents 24px as the report-page h1"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#c3d3db",
+        "files": [
+          "src/pages/ViewReport.tsx"
+        ],
+        "createdAt": "2026-10-09T09:04:21.440Z",
+        "reason": "Agent: DESIGN.md Report viewer documents the cover's slate façade band #c3d3db→#7f98a7"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#7f98a7",
+        "files": [
+          "src/pages/ViewReport.tsx"
+        ],
+        "createdAt": "2026-10-09T09:04:21.462Z",
+        "reason": "Agent: DESIGN.md Report viewer documents the cover's slate façade band #c3d3db→#7f98a7"
       }
     ]
   }

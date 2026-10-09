@@ -7,6 +7,7 @@ import {
   CircleArrowLeft,
   CodeXml,
   Gem,
+  Headset,
   KeyRound,
   List,
   LogOut,
@@ -255,8 +256,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Logo />
         </Link>
         <span className="truncate text-[16px] font-semibold max-sm:hidden">{titleFor(loc.pathname)}</span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-2">
           <NotificationBell />
+          <button
+            aria-label="Get help"
+            className="inline-flex h-9 items-center gap-1.5 rounded-[4px] border border-chrome-border px-4 text-[14px] font-semibold text-white transition-colors hover:border-white/30 hover:bg-chrome-control-hover max-sm:px-2.5"
+          >
+            <Headset className="size-4 sm:hidden" aria-hidden />
+            <span className="max-sm:sr-only">Get Help</span>
+          </button>
         </div>
       </header>
 

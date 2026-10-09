@@ -1,19 +1,26 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowRight, BellRing, FileCheck2, Radar } from "lucide-react";
-import { PRICING, SEARCH_COMPANIES, jurisdictionByCode, type Company } from "../data/model";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowRight, Check, FileText, FileUser, Plus, Radar, TextSearch, type LucideIcon } from "lucide-react";
+import { PKYB_UNSUPPORTED, PRICING, SEARCH_COMPANIES, jurisdictionByCode, type Company } from "../data/model";
 import { useStore } from "../state/store";
-import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { Button, Flag, NewTag, cx } from "../components/ui";
 
-const REPORTS = [
-  { id: "lite", name: "KYB Lite", desc: "Business overview, basic information" },
-  { id: "basic", name: "KYB Basic", desc: "Lite Report, in-depth business information" },
-  { id: "basic-plus", name: "KYB Basic Plus", desc: "Basic Report, in-depth business information" },
-  { id: "advanced", name: "KYB Advanced", desc: "Basic Report, in-depth business information" },
-  { id: "complete", name: "KYB Complete", desc: "Advanced report, risk assessment, compliance checks (AML) and UBO" },
+// Ordered from lightest to most complete, so the list reads as a ladder. `parts` is what each report is made of.
+const REPORTS: Array<{ id: string; name: string; parts: string[]; icon: LucideIcon }> = [
+  { id: "lite", name: "KYB Lite", parts: ["Business Overview", "Basic Information"], icon: FileText },
+  { id: "basic", name: "KYB Basic", parts: ["Lite Report", "In-Depth Business Information"], icon: TextSearch },
+  { id: "basic-ubo", name: "KYB Basic + Direct UBO", parts: ["Lite Report", "In-Depth Business Information", "Direct UBO"], icon: FileUser },
+  { id: "complete", name: "KYB Complete", parts: ["Advanced", "AML", "UBO", "Risk Assessment", "Benchmarking"], icon: FileUser },
 ];
-const ADDONS = [{ id: "aml", name: "AML Report", desc: "Sanctions, PEP and adverse media screening for the company" }];
+const ADDONS = [{ id: "aml", name: "AML (Company)", desc: "Sanctions, PEP and adverse media screening for the company" }];
+const PRODUCT_TABS = [
+  { id: "kyb", label: "KYB" },
+  { id: "ubo", label: "UBO" },
+  { id: "legal", label: "Legal Documents" },
+];
+const VIEW_TABS = ["Configure", "Compare"] as const;
+/** pKYB monitors are built on a KYB Basic baseline, so only that report offers it. */
+const PKYB_REPORT = "basic";
 
 export function ChooseReport() {
   const { id } = useParams();
@@ -34,200 +41,321 @@ export function ChooseReport() {
 
 function ReportPage({ company }: { company: Company }) {
   const j = jurisdictionByCode[company.jurisdiction];
-  const { monitors } = useStore();
+  const { monitors, createMonitor, toast } = useStore();
+  const navigate = useNavigate();
   const monitor = monitors.find((m) => m.regNo === company.regNo && m.status === "active");
+  const [product, setProduct] = useState("kyb");
+  const [view, setView] = useState<(typeof VIEW_TABS)[number]>("Configure");
   const [report, setReport] = useState("basic");
   const [addons, setAddons] = useState<string[]>([]);
-  const [lang, setLang] = useState({ en: true, cn: false });
-  const [creating, setCreating] = useState(false);
+  const [lang, setLang] = useState({ en: false, og: false });
+  const [pkyb, setPkyb] = useState(false);
   const selected = REPORTS.find((r) => r.id === report)!;
+  const offersPkyb = report === PKYB_REPORT;
+  const unsupported = PKYB_UNSUPPORTED.has(company.jurisdiction);
+  const addPkyb = offersPkyb && pkyb && !monitor && !unsupported;
+  const ready = lang.en || lang.og;
+  const summary = [selected.name, ...(addons.length ? ["AML (Company)"] : []), ...(addPkyb ? ["pKYB monitoring"] : [])].join(" + ");
+
+  const generate = () => {
+    if (addPkyb) {
+      const m = createMonitor(company);
+      toast({ title: "Report generated and monitoring started", body: `This KYB Basic report is the baseline for ${company.name}. Later changes are compared against it.` });
+      navigate(`/reports/${m.id}`);
+      return;
+    }
+    toast({ title: `Generating ${selected.name} report`, body: `For ${company.name}. We'll notify you when it's ready.` });
+  };
 
   return (
-    <div className="mx-auto max-w-[1280px] px-4 pt-4 pb-16 lg:px-8">
-      <nav aria-label="Report types" className="-mx-4 mb-6 flex gap-6 overflow-x-auto border-b border-border-subtle px-4 text-[13px] lg:mx-0 lg:px-0">
-        {["Our Products", "Know Your Business (KYB)", "Ultimate Beneficial Owner (UBO)", "Legal Documents"].map((t, i) => (
-          <span
-            key={t}
-            className={cx("shrink-0 border-b-2 py-2.5 whitespace-nowrap", i === 1 ? "border-interactive-primary font-semibold text-interactive-primary" : "border-transparent text-content-main")}
-          >
-            {t}
-          </span>
-        ))}
-      </nav>
-
-      <header className="mb-8 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-        <div className="min-w-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.01em] text-content-primary">{company.name}</h1>
+    <div className="mx-auto max-w-[1280px] px-4 pt-6 pb-16 lg:px-8">
+      <header className="mb-5">
+        <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[24px] leading-tight font-semibold tracking-[-0.01em] text-content-primary">
+          <span>{company.name}</span>
+          {company.localName && (
+            <>
+              <span className="h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />
+              <span lang="zh" className="font-normal text-content-main">
+                {company.localName}
+              </span>
+            </>
+          )}
           <Flag code={company.jurisdiction} className="h-4 w-6 shrink-0" />
-        </div>
-        {company.localName && <p className="mt-0.5 text-[16px] text-content-main">{company.localName}</p>}
-        <p className="mt-1 text-[13px] text-content-tertiary">
-          {j.regLabel} <span className="tnum">{company.regNo}</span>
-        </p>
-        </div>
-        {monitor ? (
-          <Link
-            to={`/pkyb/monitoring/${monitor.id}`}
-            className="inline-flex h-9 items-center gap-2 rounded-[4px] border border-interactive-primary px-4 text-[14px] font-semibold text-interactive-primary hover:bg-interactive-accent"
-          >
-            <span className="size-1.5 rounded-full bg-interactive-primary" /> Monitoring · View pKYB
-          </Link>
-        ) : (
-          <div className="flex flex-col items-end gap-1 max-sm:items-start">
-            <Button variant="secondary" onClick={() => setCreating(true)}>
-              <Radar className="size-4" /> Create pKYB monitor
-            </Button>
-            <span className="text-[12px] text-content-tertiary">{PRICING.monitorCredits} credits / year · KYB Basic baseline required</span>
+        </h1>
+        <dl className="mt-2 flex flex-col gap-y-0.5 text-[13px] sm:flex-row sm:flex-wrap sm:items-center sm:[&>div+div]:ml-4 sm:[&>div+div]:border-l sm:[&>div+div]:border-border-subtle sm:[&>div+div]:pl-4">
+          <div className="flex gap-1.5">
+            <dt className="text-content-tertiary">Business Registration No.</dt>
+            <dd className="font-medium text-content-primary tnum">{company.regNo}</dd>
           </div>
-        )}
+          <div className="flex gap-1.5">
+            <dt className="text-content-tertiary">Jurisdiction</dt>
+            <dd className="font-medium text-content-primary">{j.name}</dd>
+          </div>
+        </dl>
       </header>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex flex-col gap-8">
-          <section aria-labelledby="kyb-h">
-            <div className="mb-3 flex items-baseline justify-between">
-              <h2 id="kyb-h" tabIndex={-1} className="text-[16px] font-semibold focus:outline-none">
-                Know Your Business (KYB) Reports
-              </h2>
-              <div className="flex gap-4 text-[13px]">
-                <button className="font-semibold text-content-link hover:underline">Configure</button>
-                <button className="text-content-main hover:text-content-primary">Compare</button>
-              </div>
-            </div>
-            <div role="radiogroup" aria-labelledby="kyb-h" className="divide-y divide-border-subtle overflow-hidden rounded-[6px] border border-border-subtle bg-white">
-              {REPORTS.map((r) => (
-                <label key={r.id} className={cx("flex cursor-pointer items-start gap-4 px-4 py-4 transition-colors", report === r.id ? "bg-interactive-accent/60" : "hover:bg-base-contrast")}>
-                  <input
-                    type="radio"
-                    name="report"
-                    checked={report === r.id}
-                    onChange={() => setReport(r.id)}
-                    className="mt-1 size-4 accent-interactive-primary"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] font-semibold text-content-primary">{r.name}</span>
-                    <span className="block text-[13px] text-content-main">{r.desc}</span>
-                  </span>
-                  <span className="text-[13px] font-semibold text-interactive-primary">Preview</span>
-                </label>
-              ))}
-            </div>
-          </section>
+      <div role="group" aria-label="Product" className="mb-5 flex flex-wrap gap-2">
+        {PRODUCT_TABS.map((t) => (
+          <button
+            key={t.id}
+            aria-pressed={product === t.id}
+            onClick={() => setProduct(t.id)}
+            className={cx(
+              "inline-flex h-8 items-center rounded-full border px-4 text-[12px] font-semibold tracking-[0.04em] uppercase transition-colors max-sm:h-10",
+              product === t.id ? "border-interactive-inverse bg-interactive-inverse text-white" : "border-interactive-secondary bg-white text-content-main hover:border-content-main hover:text-content-primary",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-          <section aria-labelledby="addon-h">
-            <h2 id="addon-h" className="text-[16px] font-semibold">
-              Report Add-Ons
-            </h2>
-            <p className="mb-3 text-[13px] text-content-main">Choose multiple add-ons for your selected report.</p>
-            <div className="divide-y divide-border-subtle overflow-hidden rounded-[6px] border border-border-subtle bg-white">
-              {ADDONS.map((a) => (
-                <label key={a.id} className="flex cursor-pointer items-start gap-4 px-4 py-4 hover:bg-base-contrast">
-                  <input
-                    type="checkbox"
-                    checked={addons.includes(a.id)}
-                    onChange={(e) => setAddons((x) => (e.target.checked ? [...x, a.id] : x.filter((y) => y !== a.id)))}
-                    className="mt-1 size-4 accent-interactive-primary"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] font-semibold">{a.name}</span>
-                    <span className="block text-[13px] text-content-main">{a.desc}</span>
-                  </span>
-                  <span className="text-[13px] font-semibold text-interactive-primary">Preview</span>
-                </label>
-              ))}
-            </div>
-          </section>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 rounded-[6px] border border-border-subtle bg-white">
+          {product !== "kyb" ? (
+            <p className="px-5 py-12 text-center text-[13px] text-content-main">
+              {PRODUCT_TABS.find((t) => t.id === product)!.label} reports aren't part of this prototype. Choose KYB to configure a report.
+            </p>
+          ) : (
+            <>
+              <div role="group" aria-label="Report view" className="flex gap-6 border-b border-border-subtle px-5">
+                {VIEW_TABS.map((t) => (
+                  <button
+                    key={t}
+                    aria-pressed={view === t}
+                    onClick={() => setView(t)}
+                    className={cx(
+                      "-mb-px h-11 border-b-2 text-[14px] transition-colors",
+                      view === t ? "border-interactive-primary font-semibold text-content-primary" : "border-transparent text-content-main hover:text-content-primary",
+                    )}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              {view === "Compare" ? (
+                <p className="px-5 py-12 text-center text-[13px] text-content-main">Compare isn't part of this prototype. Choose Configure to pick a report.</p>
+              ) : (
+                <div className="flex flex-col gap-8 p-5 lg:p-6">
+                  <section aria-labelledby="kyb-h">
+                    <h2 id="kyb-h" tabIndex={-1} className="mb-3 text-[16px] font-semibold text-content-primary focus:outline-none">
+                      KYB reports
+                    </h2>
+                    <div role="radiogroup" aria-labelledby="kyb-h" className="divide-y divide-border-subtle overflow-hidden rounded-[6px] border border-border-subtle">
+                      {REPORTS.map((r) => {
+                        const on = report === r.id;
+                        return (
+                          <label
+                            key={r.id}
+                            className={cx(
+                              "relative flex cursor-pointer items-start gap-3.5 px-4 py-3.5 transition-colors",
+                              on ? "bg-interactive-selected shadow-[inset_0_0_0_1px_var(--color-interactive-primary)]" : "hover:bg-base-contrast",
+                            )}
+                          >
+                            <input type="radio" name="report" checked={on} onChange={() => setReport(r.id)} className="mt-0.5 size-4 shrink-0 accent-interactive-primary" />
+                            <r.icon className={cx("mt-px size-[18px] shrink-0", on ? "text-interactive-primary" : "text-content-tertiary")} strokeWidth={1.75} aria-hidden />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span className="text-[14px] font-semibold text-content-primary">{r.name}</span>
+                                {r.id === PKYB_REPORT && (
+                                  <span className="inline-flex h-5 items-center gap-1 rounded-full border border-border-accent bg-white px-2 text-[11px] font-semibold text-interactive-control">
+                                    <Radar className="size-3" aria-hidden /> pKYB available
+                                  </span>
+                                )}
+                              </span>
+                              <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] text-content-main">
+                                {r.parts.map((part, i) => (
+                                  <span key={part} className="inline-flex items-center gap-1.5">
+                                    {i > 0 && <Plus className="size-3 shrink-0 text-content-tertiary" strokeWidth={2.5} aria-label="plus" />}
+                                    {part}
+                                  </span>
+                                ))}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                toast({ title: `${r.name} preview`, body: "Sample reports aren't part of this prototype." });
+                              }}
+                              className="-my-1 shrink-0 rounded-[4px] px-1.5 py-1 text-[13px] font-semibold text-content-link hover:underline"
+                            >
+                              Preview
+                            </button>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section aria-labelledby="addon-h">
+                    <h2 id="addon-h" className="text-[16px] font-semibold text-content-primary">
+                      Report add-ons
+                    </h2>
+                    <p className="mt-0.5 mb-3 text-[13px] text-content-main">Optional. Added to whichever report you choose.</p>
+                    {ADDONS.map((a) => {
+                      const on = addons.includes(a.id);
+                      return (
+                        <label
+                          key={a.id}
+                          className={cx(
+                            "flex cursor-pointer items-start gap-3.5 rounded-[6px] border px-4 py-3 transition-colors",
+                            on ? "border-interactive-primary bg-interactive-selected" : "border-border-subtle hover:bg-base-contrast",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={(e) => setAddons((x) => (e.target.checked ? [...x, a.id] : x.filter((y) => y !== a.id)))}
+                            className="mt-0.5 size-4 shrink-0 accent-interactive-primary"
+                          />
+                          <span>
+                            <span className="block text-[14px] font-semibold text-content-primary">{a.name}</span>
+                            <span className="block text-[13px] text-content-main">{a.desc}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </section>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-[80px] lg:self-start">
-          <section aria-labelledby="your-h" className="rounded-[6px] border border-border-subtle bg-white p-5">
-            <h2 id="your-h" className="text-[16px] font-semibold">
-              Your Report
-            </h2>
-            <p className="mt-0.5 text-[13px] text-content-main">
-              {selected.name}
-              {addons.length > 0 && " + AML Report"}
-            </p>
-            <div className="mt-4 flex items-center justify-between border-t border-border-subtle pt-4">
-              <span className="text-[13px] text-content-main">Language</span>
-              <div className="flex gap-4">
-                {(["en", "cn"] as const).map((l) => (
-                  <label key={l} className="flex items-center gap-1.5 text-[13px]">
-                    <input type="checkbox" checked={lang[l]} onChange={(e) => setLang((s) => ({ ...s, [l]: e.target.checked }))} className="size-4 accent-interactive-primary" />
+        {/* The order slip: what's being ordered, line by line, ending in the commit. */}
+        <aside className="lg:sticky lg:top-[80px] lg:self-start">
+          <section aria-labelledby="your-h" className="rounded-[6px] border border-border-subtle bg-white">
+            <div className="border-b border-border-subtle px-5 py-4">
+              <h2 id="your-h" className="text-[16px] font-semibold text-content-primary">
+                Your report
+              </h2>
+              <p className="mt-0.5 truncate text-[12px] text-content-tertiary">For {company.name}</p>
+            </div>
+
+            <div className="px-5 py-4">
+              <p className="text-[12px] font-semibold text-content-main">Report type</p>
+              <p className="mt-1.5 flex items-center gap-2 text-[14px] font-semibold text-content-primary">
+                <selected.icon className="size-4 shrink-0 text-interactive-primary" strokeWidth={1.75} aria-hidden />
+                {selected.name}
+              </p>
+
+              {offersPkyb && (
+                // The elbow ties the monitor to the report it is built on.
+                <div className="relative mt-2 pl-6">
+                  <span aria-hidden className="absolute top-0 left-2 h-5 w-3 rounded-bl-[4px] border-b border-l border-border-accent" />
+                  <PkybOption company={company} monitorId={monitor?.id} unsupported={unsupported} checked={pkyb} onChange={setPkyb} />
+                </div>
+              )}
+
+              {addons.length > 0 && (
+                <div className="mt-4 border-t border-dashed border-border-subtle pt-3">
+                  <p className="text-[12px] font-semibold text-content-main">Add-ons</p>
+                  <p className="mt-1 text-[13px] text-content-primary">AML (Company)</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-4 border-t border-border-subtle px-5 py-3">
+              <span id="lang-h" className="text-[12px] font-semibold text-content-main">
+                Language
+              </span>
+              <div role="group" aria-labelledby="lang-h" className="flex gap-1.5">
+                {(["en", "og"] as const).map((l) => (
+                  <button
+                    key={l}
+                    aria-pressed={lang[l]}
+                    title={l === "en" ? "English" : "Original language"}
+                    onClick={() => setLang((s) => ({ ...s, [l]: !s[l] }))}
+                    className={cx(
+                      "inline-flex h-8 min-w-[52px] items-center justify-center gap-1 rounded-[4px] border px-2.5 text-[12px] font-semibold tracking-[0.04em] transition-colors max-sm:h-10",
+                      lang[l] ? "border-interactive-primary bg-interactive-selected text-interactive-control" : "border-interactive-secondary text-content-main hover:border-content-main hover:text-content-primary",
+                    )}
+                  >
+                    {lang[l] && <Check className="size-3.5" strokeWidth={2.5} aria-hidden />}
                     {l.toUpperCase()}
-                  </label>
+                  </button>
                 ))}
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <Button variant="secondary">Add to cart</Button>
-              <Button variant="primary">Generate report</Button>
-            </div>
-          </section>
 
-          <section aria-labelledby="pkyb-h" className="overflow-hidden rounded-[6px] border border-border-accent bg-white">
-            <div className="flex items-center gap-2 bg-interactive-accent px-5 py-3">
-              <Radar className="size-4 text-interactive-primary" />
-              <h2 id="pkyb-h" className="text-[14px] font-semibold text-interactive-control">
-                Keep watching this company
-              </h2>
-              <NewTag />
-            </div>
-            <div className="px-5 pt-4 pb-5">
-              {monitor ? (
-                <>
-                  <p className="text-[13px] text-content-main">
-                    This company is already being monitored. Checks run automatically and changes appear in Monitoring.
-                  </p>
-                  <Link
-                    to={`/pkyb/monitoring/${monitor.id}`}
-                    className="mt-4 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[4px] border border-interactive-primary text-[14px] font-semibold text-interactive-primary hover:bg-interactive-accent"
-                  >
-                    View pKYB monitor <ArrowRight className="size-4" />
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <p className="text-[13px] text-content-main">Perpetual KYB flags registry changes after today's check, so you don't have to re-run reports.</p>
-                  <ol className="mt-4 flex flex-col gap-3">
-                    <li className="flex gap-3">
-                      <FileCheck2 className="mt-0.5 size-4 shrink-0 text-interactive-primary" />
-                      <span className="text-[13px]">
-                        <span className="font-semibold">KYB Basic baseline</span>
-                        <span className="block text-content-main">Required. Generated when you start.</span>
-                      </span>
-                    </li>
-                    <li className="flex gap-3">
-                      <Radar className="mt-0.5 size-4 shrink-0 text-interactive-primary" />
-                      <span className="text-[13px]">
-                        <span className="font-semibold">9 change categories watched</span>
-                        <span className="block text-content-main">Checks run automatically until you stop.</span>
-                      </span>
-                    </li>
-                    <li className="flex gap-3">
-                      <BellRing className="mt-0.5 size-4 shrink-0 text-interactive-primary" />
-                      <span className="text-[13px]">
-                        <span className="font-semibold">Alerts by your severity</span>
-                        <span className="block text-content-main">In-app and email digests.</span>
-                      </span>
-                    </li>
-                  </ol>
-                  <div className="mt-4 flex items-baseline justify-between border-t border-border-subtle pt-3 text-[13px]">
-                    <span className="text-content-main">Monitor</span>
-                    <span className="font-semibold tnum">{PRICING.monitorCredits} credits / year</span>
-                  </div>
-                  <Button variant="link" className="mt-3" onClick={() => setCreating(true)}>
-                    Create pKYB monitor <ArrowRight className="size-4" />
-                  </Button>
-                </>
-              )}
+            <div className="flex flex-col gap-2 rounded-b-[6px] border-t border-border-subtle bg-base-contrast px-5 py-4">
+              <Button variant="primary" disabled={!ready} onClick={generate} className="w-full">
+                Generate report
+              </Button>
+              <Button disabled={!ready} onClick={() => toast({ title: "Added to cart", body: `${summary} for ${company.name}.` })} className="w-full">
+                Add to cart
+              </Button>
+              {!ready && <p className="pt-0.5 text-center text-[12px] text-content-tertiary">Choose a language to continue.</p>}
             </div>
           </section>
         </aside>
       </div>
-
-      <CreateMonitorDialog company={creating ? company : null} onClose={() => setCreating(false)} />
     </div>
+  );
+}
+
+/**
+ * The pKYB opt-in on a KYB Basic order. Ticking it makes this report the monitor's baseline; leaving it
+ * unticked orders the report alone. Companies already monitored, and jurisdictions pKYB doesn't cover,
+ * get a note in its place.
+ */
+function PkybOption({
+  company,
+  monitorId,
+  unsupported,
+  checked,
+  onChange,
+}: {
+  company: Company;
+  monitorId?: string;
+  unsupported: boolean;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  if (monitorId) {
+    return (
+      <div className="rounded-[6px] border border-border-accent bg-interactive-selected px-3 py-2.5">
+        <p className="flex items-center gap-1.5 text-[13px] font-semibold text-interactive-control">
+          <Radar className="size-3.5 shrink-0" aria-hidden /> Already monitored
+        </p>
+        <p className="mt-0.5 text-[12px] text-content-main">Changes to this company appear in Monitoring.</p>
+        <Link to={`/pkyb/monitoring/${monitorId}`} className="mt-1 inline-flex min-h-7 items-center gap-1 text-[12px] font-semibold text-content-link hover:underline">
+          View monitoring <ArrowRight className="size-3.5" aria-hidden />
+        </Link>
+      </div>
+    );
+  }
+
+  if (unsupported) {
+    return (
+      <div className="rounded-[6px] border border-border-subtle bg-background-subtle px-3 py-2.5">
+        <p className="flex items-center gap-1.5 text-[13px] font-semibold text-content-main">
+          <Radar className="size-3.5 shrink-0" aria-hidden /> pKYB monitoring
+        </p>
+        <p className="mt-0.5 text-[12px] text-content-main">Not available for {jurisdictionByCode[company.jurisdiction].name} companies yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <label
+      className={cx(
+        "flex cursor-pointer gap-2.5 rounded-[6px] border px-3 py-2.5 transition-colors",
+        checked ? "border-interactive-primary bg-interactive-selected" : "border-border-subtle hover:border-border-accent hover:bg-base-contrast",
+      )}
+    >
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-interactive-primary" />
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+          <span className="flex items-center gap-1.5 text-[13px] font-semibold text-content-primary">
+            Add pKYB monitoring <NewTag />
+          </span>
+          <span className="text-[12px] font-semibold text-content-primary tnum">+{PRICING.monitorCredits} credits / year</span>
+        </span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-content-main">Alerts when the registry record changes. This report becomes the baseline.</span>
+      </span>
+    </label>
   );
 }

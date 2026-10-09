@@ -1,31 +1,20 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Radar } from "lucide-react";
-import { JURISDICTIONS, SEARCH_COMPANIES, jurisdictionByCode, type Company } from "../data/model";
-import { useStore } from "../state/store";
-import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
-import { Button, Flag, cx } from "../components/ui";
+import { ChevronDown, Radar, Search } from "lucide-react";
+import { JURISDICTIONS, SEARCH_COMPANIES } from "../data/model";
+import { Button } from "../components/ui";
 
 export function SearchPage() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "Shenzhen";
   const [draft, setDraft] = useState(q);
   const [jur, setJur] = useState("all");
-  const [filter, setFilter] = useState<string>("all");
-  const [creating, setCreating] = useState<Company | null>(null);
-  const { monitors } = useStore();
   const fromPkyb = params.get("from") === "pkyb";
 
   const results = useMemo(
     () => SEARCH_COMPANIES.filter((c) => (c.name + (c.localName ?? "") + c.regNo).toLowerCase().includes(q.toLowerCase()) && (jur === "all" || c.jurisdiction === jur)),
     [q, jur],
   );
-  const groups = useMemo(() => {
-    const m = new Map<string, number>();
-    results.forEach((r) => m.set(r.jurisdiction, (m.get(r.jurisdiction) ?? 0) + 1));
-    return [...m.entries()];
-  }, [results]);
-  const shown = filter === "all" ? results : results.filter((r) => r.jurisdiction === filter);
 
   return (
     <div className="mx-auto max-w-[1280px] px-4 pt-6 pb-16 lg:px-8">
@@ -33,148 +22,115 @@ export function SearchPage() {
         <div className="mb-4 flex items-center gap-3 rounded-[6px] border border-border-accent bg-interactive-accent px-4 py-3 text-[13px] text-interactive-control">
           <Radar className="size-4 shrink-0" />
           <span>
-            Find the company you want to monitor, then choose <span className="font-semibold">Create pKYB monitor</span> in its row.
+            Find the company you want to monitor and choose <span className="font-semibold">View</span>. Pick KYB Basic, then add pKYB monitoring in <span className="font-semibold">Your Report</span>.
           </span>
         </div>
       )}
-      <form
-        className="rounded-[6px] border border-border-subtle bg-white p-5 lg:p-6"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const next = new URLSearchParams(params);
-          next.set("q", draft);
-          setParams(next);
-          setFilter("all");
-        }}
-      >
-        <h1 className="text-[26px] font-semibold tracking-[-0.01em]">Search for a business to verify</h1>
-        <div className="mt-4 grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)_auto] sm:items-end">
-          <label className="flex flex-col gap-1">
-            <span className="text-[12px] font-medium text-content-main">Jurisdiction</span>
-            <select value={jur} onChange={(e) => setJur(e.target.value)} className="h-10 rounded-[4px] border border-interactive-secondary bg-white px-2.5 text-[14px] focus:border-interactive-primary max-sm:h-11 max-sm:text-[16px]">
-              <option value="all">All jurisdictions</option>
-              {JURISDICTIONS.map((j) => (
-                <option key={j.code} value={j.code}>
-                  {j.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[12px] font-medium text-content-main">Business Name / Registration No.</span>
-            <input value={draft} onChange={(e) => setDraft(e.target.value)} className="h-10 rounded-[4px] border border-interactive-secondary px-3 text-[14px] focus:border-interactive-primary max-sm:h-11 max-sm:text-[16px]" />
-          </label>
-          <Button variant="primary" type="submit" className="h-10 px-6">
-            Search
-          </Button>
-        </div>
-      </form>
-
-      <h2 className="mt-8 mb-4 text-[18px] font-semibold">
-        {results.length} {results.length === 1 ? "company" : "companies"} found for ‘{q}’
-      </h2>
-
-      <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
-        <div className="min-w-0">
-          <p className="mb-2 text-[12px] font-semibold text-content-main">Filter by jurisdiction</p>
-          <div className="flex gap-1 overflow-x-auto lg:flex-col">
-            {[["all", results.length] as [string, number], ...groups].map(([code, n]) => (
-              <button
-                key={code}
-                aria-pressed={filter === code}
-                onClick={() => setFilter(code)}
-                className={cx(
-                  "flex h-9 shrink-0 items-center justify-between gap-3 rounded-[4px] px-3 text-left text-[13px]",
-                  filter === code ? "bg-interactive-accent font-semibold text-interactive-control" : "text-content-main hover:bg-background-subtle",
-                )}
+      <div className="rounded-[6px] border border-border-subtle bg-white p-5 lg:p-8">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const next = new URLSearchParams(params);
+            next.set("q", draft);
+            setParams(next);
+          }}
+        >
+          <h1 className="text-[26px] leading-tight font-bold tracking-[-0.01em] text-content-primary">Search for a business to verify</h1>
+          <p className="mt-3 text-[15px] text-content-main">Select a jurisdiction then enter the desired business name in either English/Original Language, or business registration number.</p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-[260px_minmax(0,1fr)_auto] sm:gap-4">
+            <label className="relative">
+              <span className="sr-only">Jurisdiction</span>
+              <select
+                value={jur}
+                onChange={(e) => setJur(e.target.value)}
+                className="h-12 w-full appearance-none rounded-[4px] border border-border-subtle bg-white pr-10 pl-4 text-[15px] text-content-primary transition-colors hover:border-border-neutral focus:border-interactive-primary max-sm:text-[16px]"
               >
-                <span>{code === "all" ? "All jurisdictions" : jurisdictionByCode[code].name}</span>
-                <span className="tnum text-content-tertiary">{n}</span>
-              </button>
-            ))}
+                <option value="all">All jurisdictions</option>
+                {JURISDICTIONS.map((j) => (
+                  <option key={j.code} value={j.code}>
+                    {j.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-content-tertiary" aria-hidden />
+            </label>
+            <label className="relative">
+              <span className="sr-only">Business name or registration number</span>
+              <Search className="pointer-events-none absolute top-1/2 left-4 size-[18px] -translate-y-1/2 text-content-tertiary" aria-hidden />
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Business name or registration no."
+                className="h-12 w-full rounded-[4px] border border-border-subtle pr-4 pl-11 text-[15px] transition-colors placeholder:text-content-tertiary hover:border-border-neutral focus:border-interactive-primary max-sm:text-[16px]"
+              />
+            </label>
+            <Button variant="primary" type="submit" className="!h-12 px-12 text-[15px]">
+              Search
+            </Button>
           </div>
-        </div>
+        </form>
 
-        <div className="min-w-0 overflow-hidden rounded-[6px] border border-border-subtle bg-white">
-          <ul className="divide-y divide-border-subtle md:hidden">
-            {shown.map((c) => {
-              const mon = monitors.find((m) => m.regNo === c.regNo && m.status === "active");
-              return (
-                <li key={c.id} className="px-4 py-3.5">
-                  <p className="font-semibold text-content-primary">{c.name}</p>
-                  {c.localName && <p className="text-[13px] text-content-main">{c.localName}</p>}
-                  <p className="mt-1 flex items-center gap-1.5 text-[12px] text-content-tertiary">
-                    <Flag code={c.jurisdiction} /> {jurisdictionByCode[c.jurisdiction].name} · <span className="tnum">{c.regNo}</span>
-                  </p>
-                  <div className="mt-3 flex items-center gap-2">
-                    {mon ? (
-                      <Link to={`/pkyb/monitoring/${mon.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-interactive-accent px-3 text-[12px] font-semibold text-interactive-control">
-                        <span className="size-1.5 rounded-full bg-interactive-primary" /> Monitoring
-                      </Link>
-                    ) : (
-                      <Button size="sm" variant="secondary" onClick={() => setCreating(c)}>
-                        <Radar className="size-3.5" /> Create pKYB monitor
-                      </Button>
-                    )}
-                    <Link to={`/report/${c.id}`} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-interactive-primary">
+        <div className="mt-8 border-t border-border-subtle pt-8">
+          <p className="sr-only" aria-live="polite">
+            {results.length} {results.length === 1 ? "company" : "companies"} found for {q}
+          </p>
+
+          {results.length === 0 ? (
+            <p className="rounded-[6px] bg-background-subtle px-5 py-10 text-center text-[14px] text-content-main">
+              No businesses match ‘{q}’. Check the spelling, try the original-language name, or search by registration number.
+            </p>
+          ) : (
+            <>
+              <ul className="divide-y divide-border-subtle overflow-hidden rounded-[6px] border border-border-subtle md:hidden">
+                {results.map((c) => (
+                  <li key={c.id} className="flex items-center gap-4 px-4 py-3.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] text-content-primary">{c.name}</span>
+                      {c.localName && <span className="block text-[14px] text-content-primary" lang="zh">{c.localName}</span>}
+                      <span className="mt-1 block text-[13px] text-content-main tnum">{c.regNo}</span>
+                    </span>
+                    <Link to={`/report/${c.id}`} className="inline-flex h-10 items-center px-2 text-[14px] font-semibold text-interactive-primary hover:underline">
                       View
                     </Link>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="overflow-x-auto max-md:hidden">
-          <table className="w-full min-w-[720px] text-left text-[13px]">
-            <thead className="border-b border-border-subtle bg-background-subtle text-[12px] text-content-main">
-              <tr>
-                <th className="px-4 py-2.5 font-semibold">Country</th>
-                <th className="px-4 py-2.5 font-semibold">Business name</th>
-                <th className="px-4 py-2.5 font-semibold">Reg. No.</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle">
-              {shown.map((c) => {
-                const mon = monitors.find((m) => m.regNo === c.regNo && m.status === "active");
-                return (
-                  <tr key={c.id} className="hover:bg-base-contrast">
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-2">
-                        <Flag code={c.jurisdiction} />
-                        {jurisdictionByCode[c.jurisdiction].name}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="block font-semibold text-content-primary">{c.name}</span>
-                      {c.localName && <span className="block text-content-main">{c.localName}</span>}
-                    </td>
-                    <td className="px-4 py-3 tnum text-content-main">{c.regNo}</td>
-                    <td className="px-4 py-3">
-                      <span className="flex items-center justify-end gap-2">
-                        {mon ? (
-                          <Link to={`/pkyb/monitoring/${mon.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-interactive-accent px-3 text-[12px] font-semibold text-interactive-control hover:bg-interactive-accent-hover">
-                            <span className="size-1.5 rounded-full bg-interactive-primary" /> Monitoring
+                  </li>
+                ))}
+              </ul>
+
+              <div className="overflow-hidden rounded-[6px] border border-border-subtle max-md:hidden">
+                <table className="w-full text-left text-[14px]">
+                  <thead className="bg-background-subtle text-[14px] tracking-[0.01em] text-content-primary uppercase">
+                    <tr>
+                      <th className="w-[38%] px-5 py-4 font-semibold">Business name</th>
+                      <th className="w-[38%] px-5 py-4 font-semibold">Registration no.</th>
+                      <th className="px-5 py-4 font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-subtle">
+                    {results.map((c) => (
+                      <tr key={c.id} className="transition-colors hover:bg-base-contrast">
+                        <td className="px-5 py-4 text-content-primary">
+                          <span className="block">{c.name}</span>
+                          {c.localName && (
+                            <span className="mt-0.5 block" lang="zh">
+                              {c.localName}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-content-primary tnum">{c.regNo}</td>
+                        <td className="px-5 py-4">
+                          <Link to={`/report/${c.id}`} className="inline-flex h-8 items-center px-1 font-semibold text-interactive-primary hover:underline">
+                            View
                           </Link>
-                        ) : (
-                          <Button size="sm" variant="secondary" onClick={() => setCreating(c)}>
-                            <Radar className="size-3.5" /> Create pKYB monitor
-                          </Button>
-                        )}
-                        <Link to={`/report/${c.id}`} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
-                          View
-                        </Link>
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
-      <CreateMonitorDialog company={creating} onClose={() => setCreating(null)} />
     </div>
   );
 }
