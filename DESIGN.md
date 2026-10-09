@@ -352,7 +352,7 @@ Buttons are compact and decisive.
 ### Navigation
 - **Top bar:** navy gradient, logo ("Asia" in chrome-accent, "Verify" in white, 17px bold), product title at 16px semibold, and 36px icon buttons in white at 85%. Hover is a 10% white overlay.
 - **Sidebar:** navy gradient, 40px rows at 14px with 18px line icons (1.75 stroke). Rest is white at 75%, hover adds a 5% white fill, active adds a 7% white fill with white text. Sub-items indent under a 12% white rule, and the active sub-item is semibold with a 2px chrome-accent marker on that rule. A "New" tag marks new modules.
-- **Tabs:** 44px tall, 14px. Active is semibold content-primary with a 2px interactive-primary underline and a accent count badge. Inactive is content-main with a background-subtle count badge. Labels shorten below sm.
+- **Tabs:** 44px tall, 14px. Active is semibold content-primary with a 2px interactive-primary underline and a accent count badge. Inactive is content-main with a background-subtle count badge. Labels shorten below sm. On Monitoring the underline is one shared bar that slides to the chosen tab (transform only, 300ms out-expo), and the incoming panel enters 12px from the side of the tab you moved toward with a fade (260ms). Nothing animates on first load; reduced motion keeps only the fade.
 
 ### Menus, dialogs and toasts
 - **⋯ menu:** a 32px ghost icon trigger opens a 200px, 6px-radius white menu with the pop shadow. It is rendered in a portal so tables never clip it. Items are 13px, with background-subtle on hover and focus, and danger items are high-red text.

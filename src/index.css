@@ -197,3 +197,30 @@ dialog[open] {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Monitoring view tabs: the incoming panel slides a short way in from the side of the tab you moved toward.
+   It starts visible-by-default (only `from` is keyed), so a skipped animation never hides content. */
+.tab-panel-in {
+  animation: tab-panel-in 260ms var(--ease-out-expo);
+}
+.tab-panel-in[data-dir="-1"] {
+  --tab-from: -12px;
+}
+@keyframes tab-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--tab-from, 12px));
+  }
+}
+@keyframes tab-panel-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* Reduced motion keeps the cross-fade, which still marks the view change, and drops the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .tab-panel-in {
+    animation-name: tab-panel-fade !important;
+    animation-duration: 160ms !important;
+  }
+}

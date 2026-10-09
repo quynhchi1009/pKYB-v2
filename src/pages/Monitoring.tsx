@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUpDown, Check, ChevronLeft, ChevronRight, Download, Ellipsis, Search, Square, SquareCheck, SquareMinus, X } from "lucide-react";
 import {
@@ -104,6 +104,38 @@ export function Monitoring() {
     document.getElementById(`tab-${TABS[to][0]}`)?.focus();
   };
 
+  // Which way the view moved, so the incoming panel slides in from that side. 0 on first render: no entrance on load.
+  const tabIdx = TABS.findIndex(([t]) => t === tab);
+  const prevTabIdx = useRef(tabIdx);
+  const tabDir = useRef(0);
+  if (prevTabIdx.current !== tabIdx) {
+    tabDir.current = tabIdx > prevTabIdx.current ? 1 : -1;
+    prevTabIdx.current = tabIdx;
+  }
+
+  // The underline is measured from the active tab, and re-measured when tab labels change width (fonts, breakpoints).
+  const tabList = useRef<HTMLDivElement>(null);
+  const [bar, setBar] = useState<{ x: number; w: number } | null>(null);
+  const [barMoves, setBarMoves] = useState(false);
+  useLayoutEffect(() => {
+    const list = tabList.current;
+    if (!list) return;
+    const measure = () => {
+      const el = list.querySelector<HTMLElement>(`#tab-${tab}`);
+      if (el) setBar({ x: el.offsetLeft, w: el.offsetWidth });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    list.querySelectorAll("[role=tab]").forEach((b) => ro.observe(b));
+    return () => ro.disconnect();
+  }, [tab]);
+  // Only animate once the underline has been placed, so it never sweeps in from the left edge on load.
+  useEffect(() => {
+    if (!bar || barMoves) return;
+    const id = requestAnimationFrame(() => setBarMoves(true));
+    return () => cancelAnimationFrame(id);
+  }, [bar, barMoves]);
+
   return (
     <div className="mx-auto max-w-[1360px] px-4 pt-6 pb-16 lg:px-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -184,7 +216,8 @@ export function Monitoring() {
         </div>
       </section>
 
-      <div role="tablist" aria-label="Monitoring views" onKeyDown={onTabKey} className="mt-8 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border-subtle">
+      <div className="mt-8 border-b border-border-subtle">
+      <div ref={tabList} role="tablist" aria-label="Monitoring views" onKeyDown={onTabKey} className="relative -mb-px flex gap-1 overflow-x-auto overflow-y-hidden">
         {TABS.map(([t, label, short]) => {
           const n = t === "active" ? active.length : t === "history" ? monitors.length : null;
           return (
@@ -197,8 +230,8 @@ export function Monitoring() {
               tabIndex={tab === t ? 0 : -1}
               onClick={() => setTab(t)}
               className={cx(
-                "-mb-px flex h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-[14px] transition-colors",
-                tab === t ? "border-interactive-primary font-semibold text-content-primary" : "border-transparent text-content-main hover:text-content-primary",
+                "flex h-11 shrink-0 items-center gap-2 px-3 text-[14px] transition-colors duration-150",
+                tab === t ? "font-semibold text-content-primary" : "text-content-main hover:text-content-primary",
               )}
             >
               <span className="max-sm:hidden">{label}</span>
@@ -207,9 +240,30 @@ export function Monitoring() {
             </button>
           );
         })}
+        {/* One underline travels between tabs, so the eye follows the move instead of hunting for the new active tab. */}
+        {bar && (
+          <span
+            aria-hidden
+            className={cx(
+              "pointer-events-none absolute bottom-0 left-0 h-[2px] w-[100px] origin-left bg-interactive-primary",
+              barMoves && "transition-transform duration-300 ease-out-expo motion-reduce:transition-none",
+            )}
+            style={{ transform: `translateX(${bar.x}px) scaleX(${bar.w / 100})` }}
+          />
+        )}
+      </div>
       </div>
 
-      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+      {/* The panel arrives from the side of the tab you moved toward; `clip` keeps the slide from flashing a scrollbar. */}
+      <div className="[overflow-x:clip]">
+      <div
+        key={tab}
+        role="tabpanel"
+        id={`panel-${tab}`}
+        aria-labelledby={`tab-${tab}`}
+        data-dir={tabDir.current}
+        className={cx(tabDir.current !== 0 && "tab-panel-in")}
+      >
         {tab === "active" && <ActiveTable rows={rows} f={f} update={update} page={Number(params.get("page") ?? 0)} search={params.toString()} />}
         {tab === "feed" && (
           <ChangeFeed
@@ -228,6 +282,7 @@ export function Monitoring() {
           />
         )}
         {tab === "history" && <OrderHistory status={status} setStatus={(v) => update({ status: v })} />}
+      </div>
       </div>
     </div>
   );
@@ -738,20 +793,6 @@ function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; se
           </button>
         ))}
       </div>
-      {status === "all" ? (
-        <dl className="mt-3 grid max-w-[980px] gap-x-6 gap-y-2 text-[13px] md:grid-cols-3">
-          {(["active", "stopped", "inactive"] as const).map((s) => (
-            <div key={s}>
-              <dt className="font-semibold text-content-primary">{STATUS_COPY[s].label}</dt>
-              <dd className="text-content-main">{STATUS_COPY[s].explain}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <p className="mt-3 max-w-[70ch] text-[13px] text-content-main">
-          <span className="font-semibold text-content-primary">{STATUS_COPY[status].label}:</span> {STATUS_COPY[status].explain}
-        </p>
-      )}
       <FilterBar q={q} setQ={setQ} jur={jur} setJur={setJur}>
         <Button variant="secondary" className="ml-auto" onClick={exportCsv}>
           <Download className="size-4" /> Export CSV
