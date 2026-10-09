@@ -45,11 +45,6 @@ export function SeveritySettings() {
     return { companies, before, after };
   }, [monitors, severity, draftMap, prefs, draft, pending, mappingChanged]);
 
-  const tierCounts = useMemo(() => {
-    const c: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
-    CATEGORIES.forEach((k) => c[draftMap[k]]++);
-    return c;
-  }, [draftMap]);
   const customised = CATEGORIES.some((c) => severity[c] !== DEFAULT_SEVERITY[c]);
   const draftIsDefault = CATEGORIES.every((c) => draftMap[c] === DEFAULT_SEVERITY[c]);
 
@@ -109,13 +104,6 @@ export function SeveritySettings() {
               <h2 id="map-h" className="text-[18px] font-semibold">
                 Category Severity Mapping
               </h2>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {TIERS_HIGH_FIRST.map((s) => (
-                <span key={s} className={cx("inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px]", SEV_STYLE[s].bg, SEV_STYLE[s].line, SEV_STYLE[s].text)}>
-                  <span className="font-semibold tnum">{tierCounts[s]}</span> {SEVERITY_LABEL[s]}
-                </span>
-              ))}
             </div>
           </div>
 

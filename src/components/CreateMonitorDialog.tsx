@@ -21,7 +21,6 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
   const navigate = useNavigate();
   const loc = useLocation();
   const customised = CATEGORIES.some((c) => severity[c] !== DEFAULT_SEVERITY[c]);
-  const tierCount = (lv: Severity) => CATEGORIES.filter((c) => severity[c] === lv).length;
   const j = company ? jurisdictionByCode[company.jurisdiction] : null;
   const existing = company ? monitors.find((m) => m.regNo === company.regNo && m.status === "active") : undefined;
   const unsupported = !!company && PKYB_UNSUPPORTED.has(company.jurisdiction);
@@ -145,11 +144,7 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
                     </h3>
                     {customised ? (
                       <p className="mt-1 text-[13px] text-content-main">
-                        Your team's settings:{" "}
-                        <span className="font-semibold text-content-primary tnum">
-                          {tierCount("high")} High · {tierCount("medium")} Medium · {tierCount("low")} Low
-                        </span>
-                        . Change in{" "}
+                        Your team's severity settings apply. Change them in{" "}
                         <Link to="/pkyb/settings" onClick={onClose} className="font-semibold text-content-link hover:underline">
                           Severity Settings
                         </Link>
