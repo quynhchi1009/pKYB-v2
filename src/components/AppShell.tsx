@@ -23,25 +23,12 @@ import { useStore } from "../state/store";
 import { CATEGORY_LABEL, RECENT_DAYS, SEVERITY_LABEL, SEVERITY_RANK, isRecent, worstSeverity } from "../data/model";
 import { NewTag, SEV_STYLE, Toasts, cx, formatDate } from "./ui";
 
-function LogoMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" fill="none" aria-hidden className={className}>
-      <circle cx="15" cy="17" r="12" stroke="currentColor" strokeWidth="2.5" />
-      <path d="M9 16.5l5 5L29 4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
+/* The AsiaVerify wordmark: teal mark and "Asia", white "Verify", on a transparent ground for the charcoal sidebar.
+   Collapsed, the frame narrows to the mark alone (the left 530 of 1972px). */
 function Logo({ compact }: { compact?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[20px] font-bold tracking-[-0.01em]">
-      <LogoMark className="size-8 shrink-0 text-chrome-accent" />
-      {!compact && (
-        <span>
-          <span className="text-chrome-accent">Asia</span>
-          <span className="text-white">Verify</span>
-        </span>
-      )}
+    <span className={cx("block h-9 overflow-hidden", compact ? "w-[37px]" : "w-[136px]")}>
+      <img src="/asiaverify-logo.png" alt="AsiaVerify" width={1972} height={522} className="h-full w-auto max-w-none" />
     </span>
   );
 }
