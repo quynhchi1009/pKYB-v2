@@ -152,8 +152,9 @@ export function NewTag({ dark }: { dark?: boolean }) {
   return (
     <span
       className={cx(
-        "inline-flex h-[18px] items-center rounded-[3px] border px-1.5 text-[11px] font-semibold",
-        dark ? "border-border-accent/60 bg-interactive-accent text-interactive-control" : "border-border-accent bg-interactive-accent text-interactive-primary",
+        "inline-flex h-[18px] items-center border px-1.5 text-[11px] font-semibold",
+        // On the Portal2 sidebar the tag is the solid green pill the live Portal uses.
+        dark ? "rounded-full border-interactive-primary bg-interactive-primary text-white" : "rounded-[3px] border-border-accent bg-interactive-accent text-interactive-primary",
       )}
     >
       New

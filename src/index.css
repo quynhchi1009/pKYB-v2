@@ -112,6 +112,20 @@
   --color-low-line: #d6d6d6;
   --color-low-cell: var(--color-border-neutral);
 
+  /* Portal2 shell: the layout the live Portal ships today, sampled from the production Choose a Report page.
+     Charcoal sidebar, white top bar on a hairline, a slightly darker page canvas than base.contrast. */
+  --color-portal-sidebar: var(--color-background-demoted);
+  --color-portal-sidebar-selected: #444444;
+  --color-portal-canvas: #f4f4f4;
+  --color-portal-line: #e8e8e8;
+  /* the unselected product pill's edge (KYB / UBO / Legal Documents) */
+  --color-portal-pill-line: #dde1e8;
+  --color-portal-pill-selected: #444444;
+  /* the floating summary panel beside a form (Your Report) */
+  /* each report option card on the Choose a Report page */
+  --shadow-card: 0 3px 8px rgb(0 0 0 / 0.07), 0 0 1px rgb(0 0 0 / 0.06);
+  --shadow-portal: 0 24px 48px -12px rgb(0 0 0 / 0.2), 0 4px 16px rgb(0 0 0 / 0.06);
+
   --shadow-pop: 0 8px 24px -6px rgb(13 22 32 / 0.18), 0 2px 6px -2px rgb(13 22 32 / 0.12);
   --shadow-dialog: 0 24px 64px -12px rgb(13 22 32 / 0.35);
 
@@ -121,7 +135,7 @@
 @layer base {
   html {
     color: var(--color-content-primary);
-    background: var(--color-base-contrast);
+    background: var(--color-portal-canvas);
     -webkit-font-smoothing: antialiased;
   }
   body {
@@ -159,7 +173,7 @@
     scrollbar-color: var(--color-border-neutral) transparent;
   }
   .nav-scroll {
-    scrollbar-color: var(--color-navy-600) transparent;
+    scrollbar-color: var(--color-portal-sidebar-selected) transparent;
   }
   a {
     text-underline-offset: 3px;

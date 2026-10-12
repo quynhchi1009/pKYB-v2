@@ -228,7 +228,7 @@ function Report({ m }: { m: Monitor }) {
         <div className="grid lg:grid-cols-[256px_minmax(0,1fr)]">
           {/* Section rail: the report's contents, grouped by printed page. */}
           <aside className="border-border-subtle max-lg:border-b lg:border-r">
-            <div className="lg:sticky lg:top-14 lg:max-h-[calc(100dvh-56px)] lg:overflow-y-auto">
+            <div className="lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-76px)] lg:overflow-y-auto">
               <div className="px-4 py-4 lg:hidden">
                 <label htmlFor="jump" className="mb-1 block text-[12px] font-medium text-content-main">
                   Jump to section

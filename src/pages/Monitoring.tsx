@@ -429,7 +429,7 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
 
       <div className="rounded-[6px] border border-border-subtle bg-white">
         {selected.size > 0 && (
-          <div className="sticky top-14 z-10 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-t-[5px] border-b border-border-subtle bg-background-system px-4 py-2 text-[13px] text-white">
+          <div className="sticky top-[76px] z-10 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-t-[5px] border-b border-border-subtle bg-background-system px-4 py-2 text-[13px] text-white">
             <span className="font-semibold tnum">{nf.format(selected.size)} selected</span>
             {selectedMix.high > 0 && (
               <span className="inline-flex items-center gap-1.5 text-high-on-dark">
@@ -691,7 +691,7 @@ function ChangeFeed({
       <div className="rounded-[6px] border border-border-subtle bg-white">
         {groups.map(([date, items]) => (
           <section key={date} aria-label={formatDateLong(date)}>
-            <h2 className="sticky top-14 z-[1] border-b border-border-subtle bg-base-contrast px-4 py-2 first:rounded-t-[6px] text-[12px] font-semibold text-content-main">{formatDateLong(date)}</h2>
+            <h2 className="sticky top-[76px] z-[1] border-b border-border-subtle bg-base-contrast px-4 py-2 first:rounded-t-[6px] text-[12px] font-semibold text-content-main">{formatDateLong(date)}</h2>
             <ul className="divide-y divide-border-subtle">
               {items.map(({ e, m }) => (
                 <li key={e.id} className="relative grid gap-2 px-4 py-3 hover:bg-base-contrast sm:grid-cols-[104px_minmax(0,1fr)] sm:items-center sm:gap-4">

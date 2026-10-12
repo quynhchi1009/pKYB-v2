@@ -16,7 +16,14 @@ const STEPS: Array<{ when: string; what: string; icon: typeof Radar }> = [
  * what will happen; the white panel is the order itself (what's watched, who sets severity, the
  * required baseline and the total), ending in the commit.
  */
-export function CreateMonitorDialog({ company, onClose }: { company: Company | null; onClose: () => void }) {
+/**
+ * `order` puts the dialog in confirmation mode (Version B of Choose a Report): the user already ticked
+ * pKYB on a KYB Basic order and pressed Generate report, so the dialog confirms what the add-on brings
+ * and hands the commit back to the page.
+ */
+export type PkybOrder = { extras: string[]; onConfirm: () => void };
+
+export function CreateMonitorDialog({ company, onClose, order }: { company: Company | null; onClose: () => void; order?: PkybOrder }) {
   const { createMonitor, toast, monitors, severity } = useStore();
   const navigate = useNavigate();
   const loc = useLocation();
@@ -25,10 +32,21 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
   const existing = company ? monitors.find((m) => m.regNo === company.regNo && m.status === "active") : undefined;
   const unsupported = !!company && PKYB_UNSUPPORTED.has(company.jurisdiction);
   const ordering = !existing && !unsupported;
-  const title = existing ? "Already monitored" : unsupported ? "pKYB isn't available here yet" : "Create a Perpetual KYB Monitor";
+  const title = existing
+    ? "Already monitored"
+    : unsupported
+      ? "pKYB isn't available here yet"
+      : order
+        ? "Confirm pKYB monitoring"
+        : "Create a Perpetual KYB Monitor";
 
   const confirm = () => {
     if (!company || unsupported) return;
+    if (order) {
+      onClose();
+      order.onConfirm();
+      return;
+    }
     const m = createMonitor(company);
     onClose();
     toast({ title: "Monitoring started", body: `This KYB Basic report is the baseline for ${company.name}. Later changes are compared against it.` });
@@ -167,6 +185,7 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
                     </h3>
                     <dl className="flex flex-col gap-3 text-[13px]">
                       <Line label="pKYB monitor" sub={`From ${formatDate(iso(TODAY))} · until you stop it`} value={`${PRICING.monitorCredits} credits / year`} />
+                      {order?.extras.map((x) => <Line key={x} label={x} sub="Report add-on · charged separately" />)}
                       <Line
                         label={
                           <span className="flex flex-wrap items-center gap-2">
@@ -196,7 +215,7 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
               <div className="flex items-center gap-2 sm:ml-auto [&>*:last-child]:max-sm:flex-1">
                 {/* An order spends credits, so Enter on open must not place it: Cancel takes focus first. */}
                 <Button variant="ghost" onClick={onClose} data-autofocus={ordering ? "" : undefined}>
-                  Cancel
+                  {order ? "Back" : "Cancel"}
                 </Button>
                 {existing ? (
                   <Button variant="primary" data-autofocus="" onClick={() => go(`/pkyb/monitoring/${existing.id}`)}>
@@ -214,7 +233,7 @@ export function CreateMonitorDialog({ company, onClose }: { company: Company | n
                   )
                 ) : (
                   <Button variant="primary" onClick={confirm}>
-                    Start monitoring <ArrowRight className="size-4" />
+                    {order ? "Confirm and generate" : "Start monitoring"} <ArrowRight className="size-4" />
                   </Button>
                 )}
               </div>
@@ -230,14 +249,14 @@ function Note({ children }: { children: ReactNode }) {
   return <p className="max-w-[48ch] text-[14px] leading-relaxed text-content-main md:pr-10">{children}</p>;
 }
 
-function Line({ label, sub, value }: { label: ReactNode; sub: string; value: string }) {
+function Line({ label, sub, value }: { label: ReactNode; sub: string; value?: string }) {
   return (
     <div className="flex items-start justify-between gap-6">
       <dt className="min-w-0">
         <span className="block font-medium text-content-primary">{label}</span>
         <span className="mt-0.5 block max-w-[46ch] text-[12px] text-pretty text-content-main tnum">{sub}</span>
       </dt>
-      <dd className="shrink-0 pt-px tnum text-content-primary">{value}</dd>
+      {value && <dd className="shrink-0 pt-px tnum text-content-primary">{value}</dd>}
     </div>
   );
 }

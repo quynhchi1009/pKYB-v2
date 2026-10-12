@@ -7,7 +7,6 @@ import {
   CircleArrowLeft,
   CodeXml,
   Gem,
-  Headset,
   KeyRound,
   List,
   LogOut,
@@ -15,6 +14,7 @@ import {
   Radar,
   Search,
   Settings,
+  ShoppingCart,
   Store,
   Tag,
   X,
@@ -23,11 +23,25 @@ import { useStore } from "../state/store";
 import { CATEGORY_LABEL, RECENT_DAYS, SEVERITY_LABEL, SEVERITY_RANK, isRecent, worstSeverity } from "../data/model";
 import { NewTag, SEV_STYLE, Toasts, cx, formatDate } from "./ui";
 
-function Logo() {
+function LogoMark({ className }: { className?: string }) {
   return (
-    <span className="text-[18px] font-bold tracking-[-0.01em]">
-      <span className="text-chrome-accent">Asia</span>
-      <span className="text-white">Verify</span>
+    <svg viewBox="0 0 32 32" fill="none" aria-hidden className={className}>
+      <circle cx="15" cy="17" r="12" stroke="currentColor" strokeWidth="2.5" />
+      <path d="M9 16.5l5 5L29 4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Logo({ compact }: { compact?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[20px] font-bold tracking-[-0.01em]">
+      <LogoMark className="size-8 shrink-0 text-chrome-accent" />
+      {!compact && (
+        <span>
+          <span className="text-chrome-accent">Asia</span>
+          <span className="text-white">Verify</span>
+        </span>
+      )}
     </span>
   );
 }
@@ -35,7 +49,7 @@ function Logo() {
 function titleFor(path: string) {
   if (path.startsWith("/search")) return "Search";
   if (path.startsWith("/reports/")) return "View Report";
-  if (path.startsWith("/report")) return "Choose report";
+  if (path.startsWith("/report")) return "Choose a report";
   return "Perpetual KYB (pKYB)";
 }
 
@@ -77,11 +91,11 @@ function NotificationBell() {
         onClick={() => setOpen((o) => !o)}
         aria-label={`Notifications, ${items.length} in the last ${RECENT_DAYS} days`}
         aria-expanded={open}
-        className="relative grid size-9 place-items-center rounded-[4px] text-chrome-content-main hover:bg-chrome-control-hover hover:text-white"
+        className="relative grid size-10 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle"
       >
-        <Bell className="size-5" aria-hidden />
+        <Bell className="size-6" strokeWidth={1.5} aria-hidden />
         {items.length > 0 && (
-          <span aria-hidden className="absolute -top-0.5 -right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-chrome-accent px-1 text-[11px] font-bold text-navy-950 tnum">
+          <span aria-hidden className="absolute top-0 right-0 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-interactive-primary px-1 text-[11px] font-bold text-white ring-2 ring-white tnum">
             {items.length > 99 ? "99+" : items.length}
           </span>
         )}
@@ -89,7 +103,7 @@ function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-11 right-0 z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-[6px] border border-border-subtle bg-white text-content-primary shadow-pop">
+          <div className="absolute top-12 right-0 z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-[6px] border border-border-subtle bg-white text-content-primary shadow-pop">
             <div className="flex items-baseline justify-between border-b border-border-subtle px-4 py-3">
               <p className="text-[14px] font-semibold">pKYB alerts</p>
               <Link to="/pkyb/settings" onClick={() => setOpen(false)} className="text-[12px] text-content-link hover:underline">
@@ -156,28 +170,28 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
 
   const row = (active: boolean) =>
     cx(
-      "group relative flex h-10 items-center gap-3 rounded-[4px] px-3 text-[14px] transition-colors",
-      active ? "bg-chrome-selected text-white" : "text-chrome-content-tertiary hover:bg-chrome-hover hover:text-white",
+      "group relative flex h-10 items-center gap-3 rounded-[4px] px-3 text-[14px] font-medium text-white transition-colors",
+      active ? "bg-portal-sidebar-selected" : "hover:bg-chrome-control-hover",
       collapsed && "justify-center px-0",
     );
 
   const item = (n: NavItem) => (
     <NavLink key={n.to} to={n.to} onClick={onNavigate} className={({ isActive }) => row(isActive)} title={collapsed ? n.label : undefined}>
-      <n.icon className="size-[18px] shrink-0" strokeWidth={1.75} />
+      <n.icon className="size-5 shrink-0" strokeWidth={1.75} />
       {!collapsed && <span className="truncate">{n.label}</span>}
       {!collapsed && n.tag && <NewTag dark />}
     </NavLink>
   );
 
   return (
-    <nav aria-label="Portal" className="nav-scroll flex h-full flex-col overflow-y-auto px-3 py-4">
+    <nav aria-label="Portal" className={cx("nav-scroll flex h-full flex-col overflow-y-auto pt-2 pb-6", collapsed ? "px-3" : "px-4")}>
       <div className="flex flex-col gap-0.5">
         <button className={row(false)} onClick={() => navigate(-1)} title={collapsed ? "Previous Page" : undefined}>
-          <CircleArrowLeft className="size-[18px] shrink-0" strokeWidth={1.75} />
+          <CircleArrowLeft className="size-5 shrink-0" strokeWidth={1.75} />
           {!collapsed && "Previous Page"}
         </button>
         <button className={cx(row(false), "max-lg:hidden")} onClick={onCollapse} title={collapsed ? "Expand Sidebar" : undefined}>
-          <ArrowLeftToLine className={cx("size-[18px] shrink-0 transition-transform", collapsed && "rotate-180")} strokeWidth={1.75} />
+          <ArrowLeftToLine className={cx("size-5 shrink-0 transition-transform", collapsed && "rotate-180")} strokeWidth={1.75} />
           {!collapsed && "Collapse Sidebar"}
         </button>
       </div>
@@ -190,17 +204,17 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
           onClick={() => (collapsed ? navigate("/pkyb/monitoring") : setPkybOpen((o) => !o))}
           title={collapsed ? "pKYB" : undefined}
         >
-          <Radar className={cx("size-[18px] shrink-0", inPkyb && "text-chrome-accent")} strokeWidth={1.75} />
+          <Radar className={cx("size-5 shrink-0", inPkyb && "text-chrome-accent")} strokeWidth={1.75} />
           {!collapsed && (
             <>
-              <span className={cx(inPkyb && "font-semibold text-white")}>pKYB</span>
+              <span className={cx(inPkyb && "font-semibold")}>pKYB</span>
               <NewTag dark />
               <ChevronDown className={cx("ml-auto size-4 transition-transform", !pkybOpen && "-rotate-90")} />
             </>
           )}
         </button>
         {pkybOpen && !collapsed && (
-          <div className="ml-[21px] flex flex-col gap-0.5 border-l border-chrome-border py-0.5 pl-3">
+          <div className="ml-[22px] flex flex-col gap-0.5 border-l border-chrome-border py-0.5 pl-3">
             {[
               { to: "/pkyb/monitoring", label: "Monitoring" },
               { to: "/pkyb/settings", label: "Severity Settings" },
@@ -213,8 +227,8 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
                   cx(
                     "relative flex h-9 items-center rounded-[4px] px-3 text-[14px] transition-colors",
                     isActive
-                      ? "bg-chrome-selected font-semibold text-white before:absolute before:top-2 before:bottom-2 before:-left-[13px] before:w-[2px] before:rounded-full before:bg-chrome-accent"
-                      : "text-chrome-content-tertiary hover:bg-chrome-hover hover:text-white",
+                      ? "bg-portal-sidebar-selected font-semibold text-white before:absolute before:top-2 before:bottom-2 before:-left-[13px] before:w-[2px] before:rounded-full before:bg-chrome-accent"
+                      : "text-chrome-content-main hover:bg-chrome-control-hover hover:text-white",
                   )
                 }
               >
@@ -227,7 +241,7 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
       </div>
       <div className="mt-auto pt-6">
         <button className={row(false)} title={collapsed ? "Logout" : undefined}>
-          <LogOut className="size-[18px] shrink-0" strokeWidth={1.75} />
+          <LogOut className="size-5 shrink-0" strokeWidth={1.75} />
           {!collapsed && "Logout"}
         </button>
       </div>
@@ -235,65 +249,61 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
   );
 }
 
+/* Portal2 layout: a full-height charcoal sidebar carries the logo; the white top bar sits beside it,
+   holding the page title in capitals and the bell and cart. */
 export function AppShell({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [drawer, setDrawer] = useState(false);
 
   return (
-    <div className="min-h-dvh bg-base-contrast">
+    <div className="flex min-h-dvh bg-portal-canvas">
       <a
         href="#main"
         className="sr-only z-[70] rounded-[4px] bg-white px-4 py-2 text-[14px] font-semibold text-interactive-primary shadow-pop focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
       >
         Skip to main content
       </a>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 bg-[linear-gradient(90deg,var(--color-navy-700),var(--color-navy-900)_55%,var(--color-navy-950))] px-4 text-white lg:px-6">
-        <button className="-ml-1 grid size-9 place-items-center rounded-[4px] hover:bg-chrome-control-hover lg:hidden" onClick={() => setDrawer(true)} aria-label="Open navigation">
-          <MenuIcon className="size-5" />
-        </button>
-        <Link to="/pkyb/monitoring" aria-label="AsiaVerify home" className={cx("shrink-0", collapsed ? "lg:w-[40px]" : "lg:w-[212px]")}>
-          <Logo />
+
+      <aside className={cx("sticky top-0 flex h-dvh shrink-0 flex-col bg-portal-sidebar max-lg:hidden", collapsed ? "w-[72px]" : "w-[260px]")}>
+        <Link to="/pkyb/monitoring" aria-label="AsiaVerify home" className={cx("flex h-[92px] shrink-0 items-center", collapsed ? "justify-center" : "px-7")}>
+          <Logo compact={collapsed} />
         </Link>
-        <span className="truncate text-[16px] font-semibold max-sm:hidden">{titleFor(loc.pathname)}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <NotificationBell />
-          <button
-            aria-label="Get help"
-            className="inline-flex h-9 items-center gap-1.5 rounded-[4px] border border-chrome-border px-4 text-[14px] font-semibold text-white transition-colors hover:border-white/30 hover:bg-chrome-control-hover max-sm:px-2.5"
-          >
-            <Headset className="size-4 sm:hidden" aria-hidden />
-            <span className="max-sm:sr-only">Get Help</span>
-          </button>
-        </div>
-      </header>
-
-      <div className="flex">
-        <aside
-          className={cx(
-            "sticky top-14 h-[calc(100dvh-56px)] shrink-0 bg-[linear-gradient(180deg,var(--color-navy-700),var(--color-navy-900)_55%,var(--color-navy-950))] max-lg:hidden",
-            collapsed ? "w-[72px]" : "w-[252px]",
-          )}
-        >
+        <div className="min-h-0 flex-1">
           <Sidebar collapsed={collapsed} onCollapse={() => setCollapsed((c) => !c)} />
-        </aside>
+        </div>
+      </aside>
 
-        {drawer && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div className="absolute inset-0 bg-background-scrim" onClick={() => setDrawer(false)} />
-            <aside className="absolute inset-y-0 left-0 w-[280px] bg-[linear-gradient(180deg,var(--color-navy-700),var(--color-navy-950))] shadow-dialog">
-              <div className="flex h-14 items-center justify-between px-4">
-                <Logo />
-                <button className="grid size-9 place-items-center rounded-[4px] text-white hover:bg-chrome-control-hover" onClick={() => setDrawer(false)} aria-label="Close navigation">
-                  <X className="size-5" />
-                </button>
-              </div>
-              <div className="h-[calc(100%-56px)]">
-                <Sidebar collapsed={false} onCollapse={() => {}} onNavigate={() => setDrawer(false)} />
-              </div>
-            </aside>
+      {drawer && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-background-scrim" onClick={() => setDrawer(false)} />
+          <aside className="absolute inset-y-0 left-0 flex w-[280px] flex-col bg-portal-sidebar shadow-dialog">
+            <div className="flex h-[76px] shrink-0 items-center justify-between pr-4 pl-6">
+              <Logo />
+              <button className="grid size-9 place-items-center rounded-[4px] text-white hover:bg-chrome-control-hover" onClick={() => setDrawer(false)} aria-label="Close navigation">
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <Sidebar collapsed={false} onCollapse={() => {}} onNavigate={() => setDrawer(false)} />
+            </div>
+          </aside>
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-[76px] shrink-0 items-center gap-3 border-b border-portal-line bg-white px-4 sm:px-6 lg:px-11">
+          <button className="-ml-1 grid size-10 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle lg:hidden" onClick={() => setDrawer(true)} aria-label="Open navigation">
+            <MenuIcon className="size-5" />
+          </button>
+          <span className="truncate font-heading text-[18px] font-bold tracking-[0.01em] text-content-primary uppercase">{titleFor(loc.pathname)}</span>
+          <div className="ml-auto flex items-center gap-2">
+            <NotificationBell />
+            <Link to="/cart" aria-label="Cart" className="grid size-10 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle">
+              <ShoppingCart className="size-6" strokeWidth={1.5} aria-hidden />
+            </Link>
           </div>
-        )}
+        </header>
 
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
           {children}
