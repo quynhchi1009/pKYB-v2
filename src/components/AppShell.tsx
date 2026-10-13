@@ -34,7 +34,7 @@ function Logo({ compact }: { compact?: boolean }) {
 }
 
 function titleFor(path: string) {
-  if (path.startsWith("/search")) return "Search";
+  if (path.startsWith("/search")) return "Search for a business";
   if (path.startsWith("/reports/")) return "View Report";
   if (path.startsWith("/report")) return "Choose a report";
   return "Perpetual KYB (pKYB)";

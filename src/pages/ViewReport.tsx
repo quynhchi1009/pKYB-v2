@@ -1,35 +1,37 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowUpRight, BadgeCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronsLeft, ChevronsRight, Download, Radar } from "lucide-react";
+import { ArrowUpRight, BadgeCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronsLeft, ChevronsRight, CircleHelp, Download, FilePlus2, Radar, ScanSearch, Share2, type LucideIcon } from "lucide-react";
 import { jurisdictionByCode, reportFacts, type Monitor, type ReportFacts } from "../data/model";
 import { useStore } from "../state/store";
 import { Button, Flag, cx, formatDate, nf } from "../components/ui";
 
-type Section = { id: string; label: string; page: number; children?: Array<{ id: string; label: string }> };
+type Section = { id: string; label: string; page: number; desc: string; children?: Array<{ id: string; label: string; desc: string }> };
 
 // Section names and order follow the Portal's KYB Basic report viewer.
+// `desc` is the hover note beside each entry in Jump to section, as the Portal shows it.
 const SECTIONS: Section[] = [
-  { id: "cover", label: "Cover Page", page: 1 },
-  { id: "risk-overview", label: "Risk Overview", page: 2 },
+  { id: "cover", label: "Cover Page", page: 1, desc: "The report cover: company name, jurisdiction and generation date." },
+  { id: "risk-overview", label: "Risk Overview", page: 2, desc: "A summary of the registry record at a glance." },
   {
     id: "company",
     label: "Company Information",
     page: 2,
+    desc: "Registration details, business activity and capital.",
     children: [
-      { id: "company-registration", label: "Basic Information" },
-      { id: "company-activity", label: "Business Activity" },
-      { id: "company-capital", label: "Capital" },
+      { id: "company-registration", label: "Basic Information", desc: "Names, registration numbers, status, type and address." },
+      { id: "company-activity", label: "Business Activity", desc: "The company's registered principal activity." },
+      { id: "company-capital", label: "Capital", desc: "Registered or issued share capital." },
     ],
   },
-  { id: "directors", label: "Directors & Officers", page: 3 },
-  { id: "shareholders", label: "Shareholders", page: 3 },
-  { id: "joint-shareholders", label: "Joint Shareholders", page: 3 },
-  { id: "risk-assessment", label: "Risk Assessment", page: 3 },
-  { id: "ubo", label: "UBO (Ultimate Beneficial Owner)", page: 3 },
-  { id: "history", label: "Historical Changes", page: 3 },
-  { id: "branches", label: "Branches", page: 3 },
-  { id: "legal-alerts", label: "Legal Alerts", page: 3 },
-  { id: "sources", label: "Data Source & Disclaimers", page: 3 },
+  { id: "directors", label: "Directors & Officers", page: 3, desc: "People appointed to run the company, with their roles." },
+  { id: "shareholders", label: "Shareholders", page: 3, desc: "Individuals and companies holding shares, with their stakes." },
+  { id: "joint-shareholders", label: "Joint Shareholders", page: 3, desc: "Shares held jointly by more than one party." },
+  { id: "risk-assessment", label: "Risk Assessment", page: 3, desc: "Registry-based indicators such as company age and recent officer changes." },
+  { id: "ubo", label: "UBO (Ultimate Beneficial Owner)", page: 3, desc: "Individuals holding 25% or more of the company directly." },
+  { id: "history", label: "Historical Changes", page: 3, desc: "Changes recorded in the registry before this report." },
+  { id: "branches", label: "Branches", page: 3, desc: "Registered branch offices operating under the same business license in different locations." },
+  { id: "legal-alerts", label: "Legal Alerts", page: 3, desc: "Litigation and enforcement records found in registry sources." },
+  { id: "sources", label: "Data Source & Disclaimers", page: 3, desc: "Where the data came from and the limits of this report." },
 ];
 const PAGES = 3;
 const pageOf = (id: string) => SECTIONS.find((s) => s.id === id || s.children?.some((c) => c.id === id))?.page ?? 1;
@@ -121,112 +123,116 @@ function Report({ m }: { m: Monitor }) {
 
   const name = showLocal ? m.localName! : m.name;
   const monitoring = m.status === "active";
-  const j = jurisdictionByCode[m.jurisdiction];
+  const notInPrototype = (what: string) => toast({ title: what, body: "Not part of this prototype." });
 
   return (
-    <div className="mx-auto max-w-[1360px] px-4 pt-6 pb-16 lg:px-8">
-      <header className="mb-5">
-        <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[24px] leading-tight font-semibold tracking-[-0.01em] text-content-primary">
+    <div className="px-4 pt-8 pb-16 sm:px-6 lg:px-8">
+      {/* Portal2 report header: name line, registration line, then a hairline. */}
+      <header className="border-b border-portal-line pb-4">
+        <h1 className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-heading text-[18px] leading-tight font-bold text-content-primary">
           <span>{m.name}</span>
           {m.localName && (
             <>
-              <span className="h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />
-              <span lang="zh" className="font-normal text-content-main">
-                {m.localName}
-              </span>
+              <span aria-hidden>|</span>
+              <span lang="zh">{m.localName}</span>
             </>
           )}
-          <Flag code={m.jurisdiction} className="h-4 w-6 shrink-0" />
+          <Flag code={m.jurisdiction} className="ml-2 h-4 w-6 shrink-0" />
         </h1>
-        <dl className="mt-2 flex flex-col gap-y-0.5 text-[13px] sm:flex-row sm:flex-wrap sm:items-center sm:[&>div+div]:ml-4 sm:[&>div+div]:border-l sm:[&>div+div]:border-border-subtle sm:[&>div+div]:pl-4">
-          <div className="flex gap-1.5">
-            <dt className="text-content-tertiary">Business Registration No.</dt>
-            <dd className="font-medium text-content-primary tnum">{m.regNo}</dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt className="text-content-tertiary">Jurisdiction</dt>
-            <dd className="font-medium text-content-primary">{j.name}</dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt className="text-content-tertiary">Generated</dt>
-            <dd className="font-medium text-content-primary tnum">{formatDate(facts.generated)}</dd>
-          </div>
-        </dl>
+        <p className="mt-3 text-[14px] text-content-main uppercase">
+          Business Registration No. <span className="tnum">{m.regNo}</span>
+        </p>
       </header>
 
-      <div className="rounded-[6px] border border-border-subtle bg-white">
-        {/* Report tabs, one per language, with the company's pKYB monitor beside them. */}
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border-subtle px-4 max-sm:pb-3 lg:px-5">
-          <div role="group" aria-label="View report" className="flex gap-6">
-            {REPORT_TABS.map((t) => {
-              const on = lang === t.lang;
-              return (
-                <button
-                  key={t.lang}
-                  aria-pressed={on}
-                  onClick={() => setLang(t.lang)}
-                  className={cx(
-                    "-mb-px inline-flex h-11 items-center gap-2 border-b-2 text-[14px] transition-colors",
-                    on ? "border-interactive-primary font-semibold text-content-primary" : "border-transparent text-content-main hover:text-content-primary",
-                  )}
-                >
-                  KYB Report
-                  <span
-                    className={cx(
-                      "inline-flex h-5 items-center rounded-[3px] px-1.5 text-[11px] font-semibold tracking-[0.04em]",
-                      on ? "bg-interactive-accent text-interactive-control" : "bg-background-subtle text-content-main",
-                    )}
-                  >
-                    {t.lang.toUpperCase()}
-                  </span>
-                </button>
-              );
-            })}
+      {/* Report tabs, one per language, then the company's pKYB monitor (design-system styling, as it's new to pKYB). */}
+      <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span id="reports-h" className="mr-3 text-[14px] font-bold text-content-primary">
+          View Report(s):
+        </span>
+        <div role="group" aria-labelledby="reports-h" className="flex flex-wrap gap-3">
+          {REPORT_TABS.map((t) => {
+            const on = lang === t.lang;
+            return (
+              <button
+                key={t.lang}
+                aria-pressed={on}
+                onClick={() => setLang(t.lang)}
+                className={cx(
+                  "inline-flex h-8 items-center rounded-[4px] border px-4 text-[13px] font-semibold transition-colors max-sm:h-10",
+                  on
+                    ? "border-portal-pill-selected bg-portal-pill-selected text-white"
+                    : "border-border-subtle bg-portal-line text-content-main hover:border-border-neutral hover:text-content-primary",
+                )}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        <span className="mx-1 h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />
+        <Link
+          to={`/pkyb/monitoring/${m.id}`}
+          className="group inline-flex h-8 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-2.5 pl-3 text-[13px] font-semibold text-interactive-control transition-colors hover:border-interactive-primary hover:bg-interactive-accent-hover"
+        >
+          <Radar className="size-4 text-interactive-primary" aria-hidden />
+          pKYB Monitoring
+          <span className="inline-flex items-center gap-1 border-l border-border-accent pl-2 text-[12px] font-medium text-interactive-primary">
+            <span className={cx("size-1.5 rounded-full", monitoring ? "bg-interactive-primary" : "bg-content-tertiary")} aria-hidden />
+            {monitoring ? "Active" : "Stopped"}
+          </span>
+          <ArrowUpRight className="size-3.5 text-interactive-primary transition-transform duration-150 group-hover:translate-x-px group-hover:-translate-y-px" aria-hidden />
+        </Link>
+      </div>
+
+      <div className="mt-5 rounded-[8px] border border-border-subtle bg-background-elevated">
+        {/* Report actions and paging, as on the Portal's report viewer. */}
+        <div className="relative grid gap-5 border-b border-border-neutral py-5 pl-5 max-xl:pr-14 sm:grid-cols-2 sm:pl-8 xl:pr-8 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto] xl:items-end xl:gap-7">
+          <ToolAction icon={FilePlus2} title="Add UBO Report / Legal Documents" action="Select report type" onClick={() => notInPrototype("Add UBO Report / Legal Documents")} />
+          <ToolAction
+            icon={ScanSearch}
+            title="Add / Update AML Report"
+            help="Screen this company against sanctions, PEP and adverse media records."
+            action="Configure AML report"
+            onClick={() => notInPrototype("Add / Update AML Report")}
+          />
+          <ToolAction
+            icon={Download}
+            title="Download Report"
+            action="Download PDF report"
+            onClick={() => toast({ title: "Downloading KYB Basic report", body: `${m.name} · generated ${formatDate(facts.generated)}` })}
+          />
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            <button
+              aria-label="Share report"
+              onClick={() => notInPrototype("Share report")}
+              className="grid size-9 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle max-xl:absolute max-xl:top-4 max-xl:right-4"
+            >
+              <Share2 className="size-6" strokeWidth={1.5} aria-hidden />
+            </button>
+            <nav aria-label="Report pages" className="flex items-center gap-3">
+              <span className="text-[14px] whitespace-nowrap text-content-primary tnum" aria-live="polite">
+                Page {page} of {PAGES}
+              </span>
+              <div className="flex gap-1.5">
+                <PageBtn label="First page" disabled={page === 1} onClick={() => goPage(1)}>
+                  <ChevronsLeft className="size-4" />
+                </PageBtn>
+                <PageBtn label="Previous page" disabled={page === 1} onClick={() => goPage(page - 1)}>
+                  <ChevronLeft className="size-4" />
+                </PageBtn>
+                <PageBtn label="Next page" disabled={page === PAGES} onClick={() => goPage(page + 1)}>
+                  <ChevronRight className="size-4" />
+                </PageBtn>
+                <PageBtn label="Last page" disabled={page === PAGES} onClick={() => goPage(PAGES)}>
+                  <ChevronsRight className="size-4" />
+                </PageBtn>
+              </div>
+            </nav>
           </div>
-          <span className="h-5 w-px bg-border-subtle max-sm:hidden" aria-hidden />
-          {/* pKYB lives beside the report it was ordered with: one click to this company's monitoring page. */}
-          <Link
-            to={`/pkyb/monitoring/${m.id}`}
-            className="group inline-flex h-8 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-2.5 pl-3 text-[13px] font-semibold text-interactive-control transition-colors hover:border-interactive-primary hover:bg-interactive-accent-hover"
-          >
-            <Radar className="size-4 text-interactive-primary" aria-hidden />
-            pKYB Monitoring
-            <span className="inline-flex items-center gap-1 border-l border-border-accent pl-2 text-[12px] font-medium text-interactive-primary">
-              <span className={cx("size-1.5 rounded-full", monitoring ? "bg-interactive-primary" : "bg-content-tertiary")} aria-hidden />
-              {monitoring ? "Active" : "Stopped"}
-            </span>
-            <ArrowUpRight className="size-3.5 text-interactive-primary transition-transform duration-150 group-hover:translate-x-px group-hover:-translate-y-px" aria-hidden />
-          </Link>
         </div>
 
-        {/* Viewer toolbar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-base-contrast px-4 py-2.5 lg:px-5">
-          <Button size="sm" onClick={() => toast({ title: "Downloading KYB Basic report", body: `${m.name} · generated ${formatDate(facts.generated)}` })}>
-            <Download className="size-4" aria-hidden /> Download PDF report
-          </Button>
-          <nav aria-label="Report pages" className="flex items-center gap-3">
-            <span className="text-[13px] whitespace-nowrap text-content-main tnum" aria-live="polite">
-              Page <span className="font-semibold text-content-primary">{page}</span> of {PAGES}
-            </span>
-            <div className="flex divide-x divide-border-subtle overflow-hidden rounded-[4px] border border-border-subtle bg-white">
-              <PageBtn label="First page" disabled={page === 1} onClick={() => goPage(1)}>
-                <ChevronsLeft className="size-4" />
-              </PageBtn>
-              <PageBtn label="Previous page" disabled={page === 1} onClick={() => goPage(page - 1)}>
-                <ChevronLeft className="size-4" />
-              </PageBtn>
-              <PageBtn label="Next page" disabled={page === PAGES} onClick={() => goPage(page + 1)}>
-                <ChevronRight className="size-4" />
-              </PageBtn>
-              <PageBtn label="Last page" disabled={page === PAGES} onClick={() => goPage(PAGES)}>
-                <ChevronsRight className="size-4" />
-              </PageBtn>
-            </div>
-          </nav>
-        </div>
-
-        <div className="grid lg:grid-cols-[256px_minmax(0,1fr)]">
-          {/* Section rail: the report's contents, grouped by printed page. */}
+        <div className="grid lg:grid-cols-[288px_minmax(0,1fr)]">
+          {/* Jump to section */}
           <aside className="border-border-subtle max-lg:border-b lg:border-r">
             <div className="lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-76px)] lg:overflow-y-auto">
               <div className="px-4 py-4 lg:hidden">
@@ -247,89 +253,67 @@ function Report({ m }: { m: Monitor }) {
                 </select>
               </div>
 
-              <nav aria-labelledby="jump-h" className="px-3 pt-5 pb-5 max-lg:hidden">
-                <h2 id="jump-h" className="px-2 pb-3 font-sans text-[12px] font-semibold tracking-[0.06em] text-content-tertiary uppercase">
+              <nav aria-labelledby="jump-h" className="py-5 pr-4 pl-2 max-lg:hidden">
+                <h2 id="jump-h" className="px-2 pb-3 font-sans text-[13px] font-normal text-content-main uppercase">
                   Jump to section
                 </h2>
-                {Array.from({ length: PAGES }, (_, i) => i + 1).map((p) => (
-                  <div key={p} className={cx(p > 1 && "mt-3")}>
-                    <p className={cx("flex items-center gap-2 px-2 pb-1 text-[12px] font-semibold tnum", p === page ? "text-interactive-control" : "text-content-tertiary")}>
-                      Page {p}
-                      <span className="h-px flex-1 bg-border-subtle" aria-hidden />
-                    </p>
-                    <ul className="flex flex-col">
-                      {SECTIONS.filter((s) => s.page === p).map((s) => {
-                        const self = active === s.id;
-                        const holdsActive = !!s.children?.some((c) => c.id === active);
-                        return (
-                          <li key={s.id}>
-                            <div className="relative flex items-center">
-                              <button
-                                onClick={() => jump(s.children?.[0].id ?? s.id)}
-                                aria-current={self || holdsActive ? "location" : undefined}
-                                className={cx(
-                                  "relative flex min-h-9 flex-1 items-center rounded-[4px] px-2 py-1.5 text-left text-[13px] transition-colors",
-                                  s.children && "pr-9",
-                                  self
-                                    ? "bg-interactive-accent font-semibold text-interactive-control before:absolute before:inset-y-1.5 before:left-0 before:w-[2px] before:rounded-full before:bg-interactive-primary"
-                                    : holdsActive
-                                      ? "font-semibold text-interactive-control hover:bg-background-subtle"
-                                      : "text-content-main hover:bg-background-subtle hover:text-content-primary",
-                                )}
-                              >
-                                {s.label}
-                              </button>
-                              {s.children && (
-                                <button
-                                  onClick={() => setCompanyOpen((o) => !o)}
-                                  aria-expanded={companyOpen}
-                                  aria-label={`${companyOpen ? "Hide" : "Show"} ${s.label} subsections`}
-                                  className="absolute right-0.5 grid size-8 place-items-center rounded-[4px] text-content-tertiary hover:bg-background-subtle hover:text-content-primary"
-                                >
-                                  <ChevronUp className={cx("size-4 transition-transform", !companyOpen && "rotate-180")} />
-                                </button>
-                              )}
-                            </div>
-                            {s.children && companyOpen && (
-                              <ul className="mb-0.5 ml-3 flex flex-col border-l border-border-subtle pl-1">
-                                {s.children.map((c) => (
-                                  <li key={c.id}>
-                                    <button
-                                      onClick={() => jump(c.id)}
-                                      aria-current={active === c.id ? "location" : undefined}
-                                      className={cx(
-                                        "relative flex min-h-8 w-full items-center rounded-[4px] px-2.5 text-left text-[13px] transition-colors",
-                                        active === c.id
-                                          ? "bg-interactive-accent font-semibold text-interactive-control before:absolute before:inset-y-1.5 before:-left-[5px] before:w-[2px] before:rounded-full before:bg-interactive-primary"
-                                          : "text-content-main hover:bg-background-subtle hover:text-content-primary",
-                                      )}
-                                    >
-                                      {c.label}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
+                <ul className="flex flex-col gap-1">
+                  {SECTIONS.map((s) => {
+                    const self = active === s.id;
+                    const holdsActive = !!s.children?.some((c) => c.id === active);
+                    return (
+                      <li key={s.id}>
+                        <div className="relative flex items-center">
+                          <RailItem
+                            id={s.id}
+                            desc={s.desc}
+                            current={self || holdsActive}
+                            onClick={() => jump(s.children?.[0].id ?? s.id)}
+                            className={cx(
+                              s.children && "pr-10",
+                              self ? RAIL_ACTIVE : holdsActive ? "font-semibold text-content-link hover:bg-interactive-selected" : RAIL_IDLE,
                             )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
+                          >
+                            {s.label}
+                          </RailItem>
+                          {s.children && (
+                            <button
+                              onClick={() => setCompanyOpen((o) => !o)}
+                              aria-expanded={companyOpen}
+                              aria-label={`${companyOpen ? "Hide" : "Show"} ${s.label} subsections`}
+                              className="absolute right-1 grid size-8 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle"
+                            >
+                              <ChevronUp className={cx("size-4 transition-transform", !companyOpen && "rotate-180")} />
+                            </button>
+                          )}
+                        </div>
+                        {s.children && companyOpen && (
+                          <ul className="mt-1 ml-2 flex flex-col gap-1 border-l border-border-subtle">
+                            {s.children.map((c) => (
+                              <li key={c.id}>
+                                <RailItem
+                                  id={c.id}
+                                  desc={c.desc}
+                                  current={active === c.id}
+                                  onClick={() => jump(c.id)}
+                                  className={cx("pl-5", active === c.id ? RAIL_ACTIVE : RAIL_IDLE)}
+                                >
+                                  {c.label}
+                                </RailItem>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               </nav>
             </div>
           </aside>
 
           {/* Report pages */}
-          <div className="min-w-0 px-4 py-5 lg:px-8 lg:py-6">
-            {/* Running head, as on the printed report. */}
-            <p className="mb-5 flex items-center justify-between gap-4 border-b border-border-subtle pb-2 text-[12px] text-content-tertiary">
-              <span>
-                KYB Basic Report · <span className="text-content-main">{showLocal ? "Original language" : "English"}</span>
-              </span>
-              <span className="tnum">No. {facts.reportNo}</span>
-            </p>
-
+          <div className="min-w-0 px-4 py-4 lg:px-6">
             {page === 1 && (
               <ReportSection id="cover" title="Cover Page">
                 <Cover m={m} facts={facts} name={name} showLocal={showLocal} />
@@ -364,12 +348,96 @@ function Report({ m }: { m: Monitor }) {
   );
 }
 
+/** One report action in the toolbar: an icon and title over an outlined button, as the Portal lays them out. */
+function ToolAction({ icon: Icon, title, help, action, onClick }: { icon: LucideIcon; title: string; help?: string; action: string; onClick: () => void }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      <p className="flex items-center gap-3 text-[14px] font-bold text-content-primary">
+        <Icon className="size-8 shrink-0" strokeWidth={1.5} aria-hidden />
+        <span className="min-w-0">{title}</span>
+        {help && (
+          <span className="group relative inline-flex">
+            <button type="button" aria-label={`About ${title}`} className="grid size-6 place-items-center rounded-full text-content-tertiary hover:text-content-primary">
+              <CircleHelp className="size-4" aria-hidden />
+            </button>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-[240px] -translate-x-1/2 rounded-[4px] bg-background-demoted px-3 py-2 text-[12px] leading-snug font-normal text-white shadow-pop group-focus-within:block group-hover:block"
+            >
+              {help}
+            </span>
+          </span>
+        )}
+      </p>
+      <Button onClick={onClick} className="w-full uppercase">
+        {action}
+      </Button>
+    </div>
+  );
+}
+
+const RAIL_ACTIVE =
+  "bg-interactive-selected font-semibold text-content-link before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-content-link";
+const RAIL_IDLE = "text-content-primary hover:bg-interactive-selected";
+
+/**
+ * A Jump to section entry. Hover or keyboard focus shows the section's note beside the rail. The note is
+ * fixed-positioned from the entry's rect, because the rail scrolls and would clip anything that overhangs it.
+ */
+function RailItem({
+  id,
+  desc,
+  current,
+  onClick,
+  className,
+  children,
+}: {
+  id: string;
+  desc: string;
+  current: boolean;
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  const [tip, setTip] = useState<{ top: number; left: number } | null>(null);
+  const show = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    setTip({ top: r.top + r.height / 2, left: r.right + 12 });
+  };
+  const hide = () => setTip(null);
+  return (
+    <>
+      <button
+        onClick={onClick}
+        onMouseEnter={(e) => show(e.currentTarget)}
+        onMouseLeave={hide}
+        onFocus={(e) => e.currentTarget.matches(":focus-visible") && show(e.currentTarget)}
+        onBlur={hide}
+        aria-current={current ? "location" : undefined}
+        aria-describedby={`tip-${id}`}
+        className={cx("relative flex min-h-10 flex-1 items-center px-3 py-2 text-left text-[13px] transition-colors", className)}
+      >
+        {children}
+      </button>
+      <span
+        id={`tip-${id}`}
+        role="tooltip"
+        hidden={!tip}
+        style={tip ? { top: tip.top, left: tip.left } : undefined}
+        className="pointer-events-none fixed z-30 w-max max-w-[420px] -translate-y-1/2 rounded-[4px] bg-background-demoted px-3 py-2 text-[12px] leading-snug text-white shadow-pop"
+      >
+        {desc}
+      </span>
+    </>
+  );
+}
+
 function PageBtn({ label, children, ...rest }: { label: string; children: ReactNode; disabled?: boolean; onClick?: () => void }) {
   return (
     <button
       aria-label={label}
       title={label}
-      className="grid size-8 place-items-center text-content-main transition-colors hover:bg-interactive-accent hover:text-interactive-control disabled:cursor-not-allowed disabled:text-content-tertiary/50 disabled:hover:bg-transparent max-sm:size-10"
+      className="grid size-9 place-items-center rounded-[4px] border border-border-subtle bg-white text-content-primary transition-colors hover:border-border-neutral hover:bg-background-subtle disabled:cursor-not-allowed disabled:text-content-tertiary/50 disabled:hover:border-border-subtle disabled:hover:bg-white max-sm:size-10"
       {...rest}
     >
       {children}
@@ -377,22 +445,20 @@ function PageBtn({ label, children, ...rest }: { label: string; children: ReactN
   );
 }
 
-/** A report heading in the Portal's style: an uppercase band on a green rule. `hidden` keeps a parent heading for screen readers only. */
+/** A report heading in the Portal's style: a pale green band in capitals over a soft rule. `hidden` keeps a parent heading for screen readers only. */
 function ReportSection({ id, title, children, level = 2, hidden }: { id: string; title: string; children: ReactNode; level?: 2 | 3; hidden?: boolean }) {
   const H = level === 2 ? "h2" : "h3";
   return (
-    <section id={`sec-${id}`} aria-labelledby={`h-${id}`} className="scroll-mt-[72px]">
+    <section id={`sec-${id}`} aria-labelledby={`h-${id}`} className="scroll-mt-[92px]">
       <H
         id={`h-${id}`}
         className={
-          hidden
-            ? "sr-only"
-            : "border-b-2 border-interactive-primary bg-interactive-accent px-3 py-2 font-heading text-[14px] font-bold tracking-[0.05em] text-interactive-control uppercase"
+          hidden ? "sr-only" : "border-b border-border-accent bg-interactive-accent px-2.5 py-2 font-heading text-[16px] font-bold text-interactive-control uppercase"
         }
       >
         {title}
       </H>
-      <div className={hidden ? undefined : "pt-3"}>{children}</div>
+      <div className={hidden ? undefined : "pt-1"}>{children}</div>
     </section>
   );
 }
@@ -445,11 +511,11 @@ function Cover({ m, facts, name, showLocal }: { m: Monitor; facts: ReportFacts; 
 /** Label-and-value rows, as the Portal prints them: a tinted label cell beside a ruled value cell. */
 function Facts({ rows }: { rows: Array<[string, ReactNode]> }) {
   return (
-    <dl className="flex flex-col gap-0.5 text-[13px]">
+    <dl className="flex flex-col gap-1 text-[14px]">
       {rows.map(([k, v]) => (
-        <div key={k} className="grid sm:grid-cols-[200px_minmax(0,1fr)] sm:gap-0.5">
-          <dt className="flex items-center bg-background-subtle px-3 py-2 font-semibold text-content-main">{k}</dt>
-          <dd className="flex items-center border-b border-border-subtle px-3 py-2 text-content-primary">{v}</dd>
+        <div key={k} className="grid sm:grid-cols-[152px_minmax(0,1fr)] sm:gap-1">
+          <dt className="flex items-center bg-background-accent px-2.5 py-2 leading-snug font-semibold text-content-primary">{k}</dt>
+          <dd className="flex items-center border-b border-border-subtle px-3.5 py-2 leading-snug text-content-primary">{v}</dd>
         </div>
       ))}
     </dl>
@@ -462,7 +528,7 @@ function Rows<T>({ cols, rows, empty }: { cols: Array<{ label: string; cell: (r:
   const grid = { gridTemplateColumns: `minmax(0,1.6fr) ${cols.slice(1).map(() => "minmax(0,1fr)").join(" ")}` };
   return (
     <div role="table" className="text-[13px]">
-      <div role="row" className="grid gap-4 bg-background-subtle px-3 py-2 text-[12px] font-semibold text-content-main max-md:hidden" style={grid}>
+      <div role="row" className="grid gap-4 bg-background-accent px-3 py-2 text-[13px] font-semibold text-content-primary max-md:hidden" style={grid}>
         {cols.map((c) => (
           <span key={c.label} role="columnheader" className={c.className}>
             {c.label}
