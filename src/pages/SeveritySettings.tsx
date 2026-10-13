@@ -90,7 +90,7 @@ export function SeveritySettings() {
 
   return (
     <div className="mx-auto max-w-[1280px] px-4 pt-6 pb-16 lg:px-8">
-      <header className="max-w-[72ch]">
+      <header>
         <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em]">Severity & Notification Settings</h1>
         <p className="mt-1 text-[14px] text-content-main">
           Choose how serious each type of change is, and when you're notified.
@@ -100,7 +100,7 @@ export function SeveritySettings() {
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section aria-labelledby="map-h">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="max-w-[60ch]">
+            <div>
               <h2 id="map-h" className="text-[18px] font-semibold">
                 Category Severity Mapping
               </h2>

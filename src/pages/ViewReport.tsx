@@ -558,7 +558,7 @@ function PageTwo({ m, facts }: { m: Monitor; facts: ReportFacts }) {
   return (
     <div className="flex flex-col gap-8">
       <ReportSection id="risk-overview" title="Risk Overview">
-        <p className="mb-3 max-w-[64ch] text-[13px] text-content-main">
+        <p className="mb-3 text-[13px] text-content-main">
           A summary of the registry record on {formatDate(facts.generated)}. It reflects what the {j.name} registry holds, not a credit or compliance rating.
         </p>
         <Facts
@@ -685,7 +685,7 @@ function PageThree({ m, facts }: { m: Monitor; facts: ReportFacts }) {
       </ReportSection>
 
       <ReportSection id="sources" title="Data Source & Disclaimers">
-        <div className="max-w-[68ch] space-y-2 text-[13px] text-content-main">
+        <div className="space-y-2 text-[13px] text-content-main">
           <p>
             Data retrieved from the {j.name} company registry on {formatDate(facts.generated)}. Report No. <span className="tnum">{facts.reportNo}</span>.
           </p>

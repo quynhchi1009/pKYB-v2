@@ -7,6 +7,7 @@ import {
   CircleArrowLeft,
   CodeXml,
   Gem,
+  Headset,
   KeyRound,
   List,
   LogOut,
@@ -289,6 +290,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link to="/cart" aria-label="Cart" className="grid size-10 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle">
               <ShoppingCart className="size-6" strokeWidth={1.5} aria-hidden />
             </Link>
+            {/* Portal2's Get Help: an outlined green button, collapsing to an icon on phones. */}
+            <button
+              aria-label="Get help"
+              className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-[4px] border border-interactive-primary bg-white px-6 text-[14px] font-bold text-interactive-primary transition-colors hover:bg-interactive-accent max-sm:ml-0 max-sm:size-10 max-sm:justify-center max-sm:px-0"
+            >
+              <Headset className="size-5 sm:hidden" aria-hidden />
+              <span className="max-sm:sr-only">Get Help</span>
+            </button>
           </div>
         </header>
 

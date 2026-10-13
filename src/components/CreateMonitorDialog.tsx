@@ -197,7 +197,7 @@ export function CreateMonitorDialog({ company, onClose, order }: { company: Comp
                         value={creditsLabel(PRICING.kybBasicCredits)}
                       />
                     </dl>
-                    <p className="mt-3 max-w-[52ch] text-[12px] text-content-main">
+                    <p className="mt-3 text-[12px] text-content-main">
                       Charged once. Later reports are charged separately.
                     </p>
                   </section>
@@ -246,7 +246,7 @@ export function CreateMonitorDialog({ company, onClose, order }: { company: Comp
 }
 
 function Note({ children }: { children: ReactNode }) {
-  return <p className="max-w-[48ch] text-[14px] leading-relaxed text-content-main md:pr-10">{children}</p>;
+  return <p className="text-[14px] leading-relaxed text-content-main md:pr-10">{children}</p>;
 }
 
 function Line({ label, sub, value }: { label: ReactNode; sub: string; value?: string }) {
@@ -254,7 +254,7 @@ function Line({ label, sub, value }: { label: ReactNode; sub: string; value?: st
     <div className="flex items-start justify-between gap-6">
       <dt className="min-w-0">
         <span className="block font-medium text-content-primary">{label}</span>
-        <span className="mt-0.5 block max-w-[46ch] text-[12px] text-pretty text-content-main tnum">{sub}</span>
+        <span className="mt-0.5 block text-[12px] text-pretty text-content-main tnum">{sub}</span>
       </dt>
       {value && <dd className="shrink-0 pt-px tnum text-content-primary">{value}</dd>}
     </div>

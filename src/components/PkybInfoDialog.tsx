@@ -61,7 +61,7 @@ export function PkybInfoDialog({
         )
       }
     >
-      <p className="max-w-[60ch] text-[14px] leading-relaxed text-content-main">
+      <p className="text-[14px] leading-relaxed text-content-main">
         Perpetual KYB keeps watching <span className="font-semibold text-content-primary">{company.name}</span> after this report. When its registry record
         changes, you're told, so you know when to pull a fresh report.
       </p>

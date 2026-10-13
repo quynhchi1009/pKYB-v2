@@ -199,7 +199,7 @@ export function MonitorDetail() {
                   {m.status === "inactive" ? "Monitoring never started" : `Stopped ${formatDate(m.endedAt ?? m.lastChecked)}`}
                 </h2>
               </div>
-              <p className="mt-2 max-w-[62ch] text-[14px] text-content-main">
+              <p className="mt-2 text-[14px] text-content-main">
                 {m.status === "inactive"
                   ? "Setup failed, so no checks have run for this company. Inactive orders can't be restarted; create a new monitor instead."
                   : `You stopped this monitor, so checks no longer run. ${
@@ -225,7 +225,7 @@ export function MonitorDetail() {
                     {baselineReady ? "Monitoring is running" : "Setting up your baseline"}
                   </h2>
                 </div>
-                <p className="mt-2 max-w-[62ch] text-[14px] text-content-main">
+                <p className="mt-2 text-[14px] text-content-main">
                   {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."} Checks run automatically, and you'll be alerted in-app and by
                   email based on your{" "}
                   <Link to="/pkyb/settings" className="font-semibold text-content-link hover:underline">
@@ -262,7 +262,7 @@ export function MonitorDetail() {
                   ))}
                 </ul>
               </div>
-              <p className="mt-3 max-w-[64ch] text-[13px] text-content-tertiary">
+              <p className="mt-3 text-[13px] text-content-tertiary">
                 pKYB tells you which part of the record changed. The fresh report shows the current values to compare with your baseline.
               </p>
 
