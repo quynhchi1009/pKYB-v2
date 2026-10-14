@@ -78,7 +78,7 @@ Two positioning questions are **open, not decided**:
   - Write "last checked" or "checks run automatically".
   - Never write "checks every N days" or show a countdown.
 - **API/Portal parity:** the same order state shows in both channels.
-- **Export:** CSV export of order history and the change log, for audit.
+- **Export:** removed from the Portal UI (decided 2026-10-14). The requirements doc asked for CSV export of order history and the change log; the Portal has no export action.
 
 ## Brand Commitments
 

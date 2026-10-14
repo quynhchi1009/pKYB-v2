@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowUpDown, Check, ChevronLeft, ChevronRight, Download, Ellipsis, Search, Square, SquareCheck, SquareMinus, X } from "lucide-react";
+import { ArrowDown, ArrowUpDown, Building2, Check, ChevronLeft, ChevronRight, CircleAlert, Ellipsis, Info, Search, Square, SquareCheck, SquareMinus, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import {
   CATEGORIES,
   CATEGORY_LABEL,
@@ -10,10 +10,7 @@ import {
   SEVERITY_RANK,
   RECENT_DAYS,
   STATUS_COPY,
-  TODAY,
-  addDays,
   isRecent,
-  iso,
   jurisdictionByCode,
   worstSeverity,
   type ChangeEvent,
@@ -24,7 +21,6 @@ import {
 } from "../data/model";
 import { useStore } from "../state/store";
 import { applyFilters, buildRow, describeFilters, filtersFromParams, type Filters, type Row } from "../data/queue";
-import { Heatmap } from "../components/Heatmap";
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { Button, CategoryChip, EventSeverity, Flag, Menu, SEV_STYLE, Select, cx, formatDate, formatDateLong, nf } from "../components/ui";
@@ -39,7 +35,7 @@ const TABS: Array<[Tab, string, string]> = [
 ];
 
 const PAGE = 25;
-const HIGH_RAMP = ["var(--color-background-subtle)", "var(--color-high-ramp-1)", "var(--color-high-ramp-2)", "var(--color-high-cell)"];
+const SEV_ICON: Record<Severity, LucideIcon> = { high: TriangleAlert, medium: CircleAlert, low: Info };
 const asCompany = (m: Monitor): Company => ({ id: m.id, name: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, status: "Registered" });
 
 export function Monitoring() {
@@ -74,25 +70,9 @@ export function Monitoring() {
 
   const triage = useMemo(() => {
     const by: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
-    let companies = 0;
-    for (const r of rows) if (r.recentSev) (by[r.recentSev]++, companies++);
-    const heatSince = iso(addDays(TODAY, -26 * 7));
-    let recent = 0;
-    let peak = 1;
-    // The heatmap shares the headline's lens: High changes, so a busy stretch stands out.
-    const highByDay = new Map<string, number>();
-    for (const r of rows)
-      for (const e of r.m.events) {
-        if (isRecent(e)) recent++;
-        if (worstSeverity(e.categories, severity) !== "high") continue;
-        const n = (highByDay.get(e.date) ?? 0) + 1;
-        highByDay.set(e.date, n);
-        if (e.date >= heatSince && n > peak) peak = n;
-      }
-    return { by, companies, recent, highByDay, peak };
-  }, [rows, severity]);
-  // The ramp scales to the busiest day on screen, so it never saturates into one flat colour.
-  const rampStep = (n: number) => (n === 0 ? 0 : n <= triage.peak / 3 ? 1 : n <= (2 * triage.peak) / 3 ? 2 : 3);
+    for (const r of rows) if (r.recentSev) by[r.recentSev]++;
+    return { by };
+  }, [rows]);
 
   const f = filtersFromParams(params);
   const onTabKey = (e: React.KeyboardEvent) => {
@@ -145,75 +125,31 @@ export function Monitoring() {
         </div>
       </header>
 
-      {/* Triage band: one surface, three jobs, in reading order. */}
-      <section aria-label="Triage" className="mt-6 grid overflow-hidden rounded-[6px] border border-border-subtle bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.4fr)]">
-        <div className="flex flex-col justify-between gap-5 p-5 lg:p-6">
-          <div>
-            <p className="text-[13px] font-semibold text-content-main">Changed in the last {RECENT_DAYS} days</p>
-            <p className="mt-1 flex items-baseline gap-2">
-              <span className="text-[44px] leading-none font-semibold tracking-[-0.03em] tnum">{nf.format(triage.companies)}</span>
-              <span className="text-[14px] text-content-main">{triage.companies === 1 ? "company" : "companies"}</span>
-            </p>
-            {/* The chips are the severity filter for the table below: press one to narrow to it, press it again to clear. */}
-            <div role="group" aria-label={`Filter companies by their most severe change in the last ${RECENT_DAYS} days`} className="mt-4 flex flex-wrap gap-2">
-              {(["high", "medium", "low"] as Severity[]).map((s) => {
-                const pressed = tab === "active" && f.sev === s;
-                return (
-                  <button
-                    key={s}
-                    aria-pressed={pressed}
-                    onClick={() => (pressed ? update({ sev: null }) : update({ tab: null, recent: "1", sev: s }))}
-                    className={cx(
-                      "inline-flex h-8 items-center gap-2 rounded-full border px-3 text-[13px] transition-colors hover:brightness-[0.97] max-sm:h-10",
-                      SEV_STYLE[s].bg,
-                      SEV_STYLE[s].line,
-                      SEV_STYLE[s].text,
-                      pressed && "shadow-[inset_0_0_0_1px_currentColor]",
-                    )}
-                  >
-                    {pressed ? <Check className="size-3.5" strokeWidth={2.5} aria-hidden /> : <span className={cx("size-2 rounded-full", SEV_STYLE[s].dot)} aria-hidden />}
-                    <span className="font-semibold tnum">{nf.format(triage.by[s])}</span> {SEVERITY_LABEL[s]}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div>
-            <dl className="text-[13px]">
-              <dt className="text-content-tertiary">Changes, last {RECENT_DAYS} days</dt>
-              <dd className="font-semibold tnum">{nf.format(triage.recent)}</dd>
-            </dl>
-          </div>
-        </div>
-        <div className="border-t border-border-subtle bg-base-contrast/60 p-5 lg:border-t-0 lg:border-l lg:p-6">
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-[13px] font-semibold text-content-main">High-severity changes per day · last 26 weeks</p>
-            <span className="flex items-center gap-1.5 text-[11px] text-content-tertiary">
-              None
-              {HIGH_RAMP.map((c) => (
-                <span key={c} className="size-2.5 rounded-[2px]" style={{ background: c }} />
-              ))}
-              <span className="tnum">{triage.peak}</span>
-            </span>
-          </div>
-          <Heatmap
-            weeks={26}
-            size={13}
-            gap={3}
-            ariaLabel="High-severity changes per day across your portfolio"
-            selected={tab === "feed" && f.sev === "high" ? day : null}
-            onSelect={(d) => update(d ? { day: d, tab: "feed", sev: "high", alerts: null } : { day: null })}
-            cell={(d) => {
-              const n = triage.highByDay.get(d) ?? 0;
-              return {
-                fill: HIGH_RAMP[rampStep(n)],
-                label: `${n === 0 ? "No" : n} High-severity change${n === 1 ? "" : "s"} · ${formatDate(d)}`,
-                active: n > 0,
-              };
-            }}
+      {/* Portfolio summary. The per-day heatmap lives on each company page; across hundreds of monitors it only adds noise. */}
+      <section aria-label="Portfolio summary" className="mt-6">
+        <div role="group" aria-label={`Filter active monitors. Severity counts are companies by their most severe change in the last ${RECENT_DAYS} days.`} className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
+          <StatCard
+            value={active.length}
+            label="Total monitored"
+            icon={Building2}
+            onClick={() => update({ tab: null, sev: null, recent: null })}
           />
-          <p className="mt-2 text-[12px] text-content-tertiary">Select a day to open its High changes in the feed.</p>
+          {(["high", "medium", "low"] as Severity[]).map((s) => {
+            const pressed = tab === "active" && f.sev === s;
+            return (
+              <StatCard
+                key={s}
+                value={triage.by[s]}
+                label={`${SEVERITY_LABEL[s]} severity`}
+                icon={SEV_ICON[s]}
+                severity={s}
+                pressed={pressed}
+                onClick={() => (pressed ? update({ sev: null, recent: null }) : update({ tab: null, recent: "1", sev: s }))}
+              />
+            );
+          })}
         </div>
+        <p className="mt-2 text-[12px] text-content-tertiary">Severity counts are companies, by their most severe change in the last {RECENT_DAYS} days. Select a card to filter the table.</p>
       </section>
 
       <div className="mt-8 border-b border-border-subtle">
@@ -411,7 +347,7 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
 
   return (
     <>
-      {/* Severity is filtered by the triage chips above, so the bar carries no second severity control. */}
+      {/* Severity is filtered by the summary cards above, so the bar carries no second severity control. */}
       <FilterBar q={q} setQ={(v) => update({ q: v })} jur={jur} setJur={(v) => update({ jur: v })} cat={cat} setCat={(v) => update({ cat: v })}>
         <label className="flex h-9 cursor-pointer items-center gap-2 rounded-[4px] border border-interactive-secondary bg-white px-3 text-[13px] select-none max-sm:h-11">
           <input type="checkbox" checked={onlyRecent} onChange={(e) => update({ recent: e.target.checked ? "1" : null })} className="size-4 accent-interactive-primary" />
@@ -762,18 +698,6 @@ function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; se
   }, [monitors, status, jur, q]);
   useEffect(() => setPage(0), [status, jur, q]);
 
-  const exportCsv = () => {
-    const head = ["Company", "Registration no.", "Jurisdiction", "Status", "Created", "Ended", "Changes recorded"];
-    const lines = list.map((m) => [m.name, m.regNo, jurisdictionByCode[m.jurisdiction].name, STATUS_COPY[m.status].label, m.createdAt, m.endedAt ?? "", String(m.events.length)]);
-    const csv = [head, ...lines].map((r) => r.map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pkyb-order-history-${iso(TODAY)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 pt-4" role="radiogroup" aria-label="Order status">
@@ -793,11 +717,7 @@ function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; se
           </button>
         ))}
       </div>
-      <FilterBar q={q} setQ={setQ} jur={jur} setJur={setJur}>
-        <Button variant="secondary" className="ml-auto" onClick={exportCsv}>
-          <Download className="size-4" /> Export CSV
-        </Button>
-      </FilterBar>
+      <FilterBar q={q} setQ={setQ} jur={jur} setJur={setJur} />
       <div className="overflow-hidden rounded-[6px] border border-border-subtle bg-white">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[940px] text-left text-[13px]">
@@ -881,5 +801,39 @@ export function StatusBadge({ status }: { status: MonitorStatus }) {
       />
       {STATUS_COPY[status].label}
     </span>
+  );
+}
+
+/** One summary figure. Severity cards take their step's tint; the total stays neutral with the brand-green icon. */
+function StatCard({ value, label, icon: Icon, severity, pressed, onClick }: { value: number; label: string; icon: LucideIcon; severity?: Severity; pressed?: boolean; onClick: () => void }) {
+  const st = severity && SEV_STYLE[severity];
+  return (
+    <button
+      aria-pressed={severity ? pressed : undefined}
+      title={severity ? undefined : "Show all active monitors"}
+      onClick={onClick}
+      className={cx(
+        "flex min-w-0 items-center justify-between gap-3 rounded-[6px] border px-4 py-3.5 text-left transition-[filter,box-shadow] duration-150 hover:brightness-[0.97] sm:px-5 sm:py-4",
+        st ? cx(st.bg, st.line) : "border-border-subtle bg-white",
+        pressed && st && cx("shadow-[inset_0_0_0_1px_currentColor]", st.text),
+      )}
+    >
+      <span className="min-w-0">
+        <span className={cx("block text-[26px] leading-tight font-semibold tracking-[-0.015em] tnum", st ? st.text : "text-content-primary")}>{nf.format(value)}</span>
+        <span className={cx("mt-0.5 flex items-center gap-1 text-[12px] font-semibold tracking-[0.04em] uppercase", st ? st.text : "text-content-main")}>
+          {pressed && <Check className="size-3.5 shrink-0" strokeWidth={2.5} aria-hidden />}
+          <span className="truncate">{label}</span>
+        </span>
+      </span>
+      <span
+        aria-hidden
+        className={cx(
+          "grid size-10 shrink-0 place-items-center rounded-full max-[400px]:hidden sm:size-12",
+          st ? cx("bg-white/70", st.text) : "bg-interactive-accent text-interactive-control",
+        )}
+      >
+        <Icon className="size-5" strokeWidth={2} />
+      </span>
+    </button>
   );
 }

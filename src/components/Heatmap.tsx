@@ -33,11 +33,11 @@ export function Heatmap({
   const scroller = useRef<HTMLDivElement>(null);
   const cellRefs = useRef(new Map<string, SVGRectElement>());
   const descId = useId();
-  // Open on the most recent weeks when the grid is wider than its card.
+  // Open on the most recent weeks when the grid is wider than its card, and stay there when the cell size changes.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el) el.scrollLeft = el.scrollWidth;
-  }, [weeks]);
+  }, [weeks, size, gap]);
   const [hover, setHover] = useState<{ x: number; y: number; label: string } | null>(null);
   const [focusDate, setFocusDate] = useState<string | null>(null);
   const [ringDate, setRingDate] = useState<string | null>(null);

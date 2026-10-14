@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, CircleAlert, CirclePause, Download, Ellipsis, FileCheck2, LoaderCircle, Radar, SlidersHorizontal, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, LoaderCircle, Radar, SlidersHorizontal, X } from "lucide-react";
 import { CATEGORY_LABEL, CATEGORY_SECTION, PRICING, RECENT_DAYS, SEVERITY_RANK, TODAY, addDays, creditsLabel, isRecent, iso, jurisdictionByCode, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
 import { useStore } from "../state/store";
 import { Heatmap } from "../components/Heatmap";
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { StatusBadge } from "./Monitoring";
-import { Button, CategoryChip, Dialog, EventSeverity, Flag, Menu, SEV_STYLE, cx, formatDate, formatDateLong, nf } from "../components/ui";
+import { Button, CategoryChip, Dialog, EventSeverity, Flag, SEV_STYLE, cx, formatDate, formatDateLong, nf } from "../components/ui";
 
 const CELL: Record<Severity | "none", string> = {
   none: "var(--color-background-subtle)",
@@ -16,6 +16,9 @@ const CELL: Record<Severity | "none", string> = {
   high: "var(--color-high-cell)",
 };
 const LOG_PAGE = 12;
+// The header heatmap's width beside the name, and the gap between them (gap-x-6).
+const HEAT_W = 700;
+const HEADER_GAP = 24;
 
 const asCompany = (m: Monitor): Company => ({ id: m.id, name: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, status: "Registered" });
 const plural = (n: number, one: string, many: string) => `${nf.format(n)} ${n === 1 ? one : many}`;
@@ -23,7 +26,6 @@ const plural = (n: number, one: string, many: string) => `${nf.format(n)} ${n ==
 export function MonitorDetail() {
   const { id } = useParams();
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const { monitors, severity, toast, reports, requestReport, queue } = useStore();
   const m = monitors.find((x) => x.id === id);
   const [stopping, setStopping] = useState(false);
@@ -40,6 +42,28 @@ export function MonitorDetail() {
     return () => window.clearTimeout(t);
   }, [baselineReady]);
   useEffect(() => setPage(0), [day]);
+
+  // The name outranks the heatmap. The grid sits beside the name only while the name still reads in two lines or fewer;
+  // a longer registered name takes the full width and the heatmap drops to its own row. Measured, because character
+  // counts lie across fonts, scripts and window widths.
+  const headerRef = useRef<HTMLElement>(null);
+  const nameProbe = useRef<HTMLSpanElement>(null);
+  const [heatBeside, setHeatBeside] = useState(false);
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const probe = nameProbe.current;
+    if (!header || !probe) return;
+    const fit = () => {
+      const room = header.clientWidth - HEAT_W - HEADER_GAP;
+      const need = probe.offsetWidth + 36; // the name on one line, plus the flag beside it
+      setHeatBeside(room >= 320 && need <= room * 1.8);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(header);
+    document.fonts?.ready.then(fit);
+    return () => ro.disconnect();
+  }, [m?.name, m?.events.length]);
 
   const yearAgo = iso(addDays(TODAY, -365));
   const stats = useMemo(() => {
@@ -81,6 +105,14 @@ export function MonitorDetail() {
     : (m.events[0] ?? null);
   const leadSev = lead ? worstSeverity(lead.categories, severity) : null;
   const log = day ? m.events.filter((e) => e.date === day) : m.events;
+  // The grid sits in the header, well above the log it filters, so choosing a day brings the log into view.
+  const selectDay = (d: string | null) => {
+    setDay(d);
+    if (d) {
+      const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      requestAnimationFrame(() => document.getElementById("change-log")?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" }));
+    }
+  };
   const pages = Math.max(1, Math.ceil(log.length / LOG_PAGE));
   const reportState = reports[m.id];
   const price = creditsLabel(PRICING.kybBasicCredits);
@@ -160,32 +192,69 @@ export function MonitorDetail() {
         )}
       </div>
 
-      <header className="mt-4 flex items-start justify-between gap-x-4">
+      <header ref={headerRef} className={cx("relative mt-4 grid items-start gap-x-6 gap-y-4", heatBeside && "grid-cols-[minmax(0,1fr)_auto]")}>
+        <span ref={nameProbe} aria-hidden className="pointer-events-none invisible absolute top-0 left-0 font-heading text-[26px] font-semibold tracking-[-0.015em] whitespace-nowrap">
+          {m.name}
+        </span>
         <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em]">{m.name}</h1>
-            <Flag code={m.jurisdiction} className="h-4 w-6 shrink-0" />
-          </div>
-          {m.localName && <p className="text-[16px] text-content-main">{m.localName}</p>}
+          {/* The flag rides on the name's last line, so a wrapped name never strands it at the far edge. */}
+          <h1 className="text-[22px] leading-tight font-semibold tracking-[-0.015em] text-balance [overflow-wrap:anywhere] sm:text-[26px]">
+            {m.name}
+            <Flag code={m.jurisdiction} className="ml-3 h-4 w-6 -translate-y-0.5 align-middle" />
+          </h1>
+          {m.localName && <p className="text-[16px] text-content-main [overflow-wrap:anywhere]">{m.localName}</p>}
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-content-main">
             <StatusBadge status={m.status} />
             <span>
               {j.regLabel} <span className="tnum">{m.regNo}</span> · {j.name}
             </span>
           </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
+          {/* Stopping is the monitor's only action besides the report, so it stays in view instead of behind a menu. Red outline, not fill: it confirms first and never outranks the report. */}
           {active && (
-            <Menu
-              label="More monitor actions"
-              trigger={<Ellipsis className="size-5" />}
-              items={[
-                { label: "Severity settings", icon: SlidersHorizontal, onSelect: () => navigate("/pkyb/settings") },
-                { label: "Stop monitoring", icon: X, danger: true, onSelect: () => setStopping(true) },
-              ]}
-            />
+            <Button
+              variant="danger-outline"
+              size="sm"
+              onClick={() => setStopping(true)}
+              className="mt-3"
+            >
+              <CircleStop className="size-4" aria-hidden /> Stop monitoring
+            </Button>
           )}
         </div>
+        {/* The year at a glance shares the first screen with the name: beside it when the name is short, under it when not. */}
+        {m.events.length > 0 && (
+          <section aria-labelledby="heat-h" style={heatBeside ? { width: HEAT_W } : undefined} className="min-w-0 rounded-[6px] border border-border-subtle bg-white px-4 pt-3 pb-2">
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h2 id="heat-h" className="text-[13px] font-semibold text-content-main">
+                Activity, last 365 days
+              </h2>
+              <span className="flex items-center gap-3 text-[11px] text-content-tertiary">
+                {(["low", "medium", "high"] as Severity[]).map((s) => (
+                  <span key={s} className="flex items-center gap-1">
+                    <span className="size-2.5 rounded-[2px]" style={{ background: CELL[s] }} />
+                    {s[0].toUpperCase() + s.slice(1)}
+                  </span>
+                ))}
+              </span>
+            </div>
+            <Heatmap
+              weeks={53}
+              size={heatBeside ? 10 : 12}
+              gap={heatBeside ? 2 : 3}
+              ariaLabel={`Changes detected for ${m.name} over the last year, coloured by severity. Select a day to filter the change log.`}
+              selected={day}
+              onSelect={selectDay}
+              cell={(d) => {
+                const c = stats.byDay.get(d);
+                return {
+                  fill: CELL[c?.sev ?? "none"],
+                  label: c ? `${c.n} change${c.n > 1 ? "s" : ""} · ${c.sev[0].toUpperCase() + c.sev.slice(1)} · ${formatDate(d)}` : `No changes · ${formatDate(d)}`,
+                  active: !!c,
+                };
+              }}
+            />
+          </section>
+        )}
       </header>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -275,40 +344,7 @@ export function MonitorDetail() {
 
           {m.events.length > 0 && (
             <>
-              <section aria-labelledby="heat-h" className="rounded-[6px] border border-border-subtle bg-white p-5">
-                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 id="heat-h" className="text-[16px] font-semibold">
-                    Activity, last 365 days
-                  </h2>
-                  <span className="flex items-center gap-3 text-[11px] text-content-tertiary">
-                    {(["low", "medium", "high"] as Severity[]).map((s) => (
-                      <span key={s} className="flex items-center gap-1">
-                        <span className="size-2.5 rounded-[2px]" style={{ background: CELL[s] }} />
-                        {s[0].toUpperCase() + s.slice(1)}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-                <Heatmap
-                  weeks={53}
-                  size={12}
-                  gap={3}
-                  ariaLabel={`Changes detected for ${m.name} over the last year, coloured by severity`}
-                  selected={day}
-                  onSelect={setDay}
-                  cell={(d) => {
-                    const c = stats.byDay.get(d);
-                    return {
-                      fill: CELL[c?.sev ?? "none"],
-                      label: c ? `${c.n} change${c.n > 1 ? "s" : ""} · ${c.sev[0].toUpperCase() + c.sev.slice(1)} · ${formatDate(d)}` : `No changes · ${formatDate(d)}`,
-                      active: !!c,
-                    };
-                  }}
-                />
-                <p className="mt-2 text-[12px] text-content-tertiary">Each day takes the colour of its most severe change. Select a coloured day to filter the log.</p>
-              </section>
-
-              <section aria-labelledby="log-h" className="overflow-hidden rounded-[6px] border border-border-subtle bg-white">
+              <section id="change-log" aria-labelledby="log-h" className="scroll-mt-24 overflow-hidden rounded-[6px] border border-border-subtle bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-5 py-3.5">
                   <h2 id="log-h" className="text-[16px] font-semibold">
                     Change log <span className="font-normal text-content-tertiary tnum">({nf.format(log.length)})</span>

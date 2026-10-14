@@ -45,7 +45,7 @@ export const SEV_STYLE: Record<Severity, { text: string; bg: string; line: strin
 };
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger" | "link";
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "danger-outline" | "link";
   size?: "sm" | "md";
 };
 export const Button = forwardRef<HTMLButtonElement, BtnProps>(function Button(
@@ -68,6 +68,7 @@ export const Button = forwardRef<HTMLButtonElement, BtnProps>(function Button(
         variant === "secondary" && "border border-interactive-primary bg-white text-interactive-primary hover:bg-interactive-accent",
         variant === "ghost" && "text-content-main hover:bg-background-subtle hover:text-content-primary",
         variant === "danger" && "bg-sentiment-negative text-white hover:bg-sentiment-negative-hover",
+        variant === "danger-outline" && "border border-high-line bg-white text-high hover:border-high hover:bg-high-bg",
         variant === "link" && "min-h-8 text-content-link underline-offset-4 hover:underline",
         className,
       )}
