@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   type LucideIcon,
 } from "lucide-react";
-import { CATEGORY_LABEL, SEVERITY_LABEL, jurisdictionByCode, worstSeverity, type Category, type ChangeEvent, type Severity } from "../data/model";
+import { CATEGORY_LABEL, SEVERITY_LABEL, SEVERITY_RANK, jurisdictionByCode, worstSeverity, type Category, type ChangeEvent, type Severity } from "../data/model";
 import { useStore, type Toast } from "../state/store";
 
 export const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
@@ -118,10 +118,21 @@ export function EventSeverity({ event, size = "md" }: { event: ChangeEvent; size
   );
 }
 
-export function CategoryChip({ category, showSeverity = true }: { category: Category; showSeverity?: boolean }) {
+/** `tinted` carries severity in the chip's own colour, so a dense table needs no separate severity pill. */
+export function CategoryChip({ category, showSeverity = true, tinted = false }: { category: Category; showSeverity?: boolean; tinted?: boolean }) {
   const { severity } = useStore();
   const Icon = CATEGORY_ICON[category];
   const sev = severity[category];
+  if (tinted) {
+    const s = SEV_STYLE[sev];
+    return (
+      <span className={cx("inline-flex h-6 items-center gap-1.5 rounded-[4px] border px-2 text-[12px] font-semibold", s.bg, s.line, s.text)} title={`${CATEGORY_LABEL[category]} · ${SEVERITY_LABEL[sev]} severity`}>
+        <Icon className="size-3.5" strokeWidth={2} aria-hidden />
+        {CATEGORY_LABEL[category]}
+        <span className="sr-only">, {SEVERITY_LABEL[sev]} severity</span>
+      </span>
+    );
+  }
   return (
     <span
       className={cx("inline-flex h-6 items-center gap-1.5 rounded-[4px] border border-border-subtle px-2 text-[12px] text-content-main", showSeverity ? "bg-white" : "bg-background-subtle")}
@@ -135,6 +146,20 @@ export function CategoryChip({ category, showSeverity = true }: { category: Cate
           <span className="sr-only">, {SEVERITY_LABEL[sev]} severity</span>
         </>
       )}
+    </span>
+  );
+}
+
+/** Change category chips, tinted by severity, most severe first. Shared by both tables so a change reads the same everywhere. */
+export function ChangeChips({ categories }: { categories: Category[] }) {
+  const { severity } = useStore();
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {[...categories]
+        .sort((a, b) => SEVERITY_RANK[severity[b]] - SEVERITY_RANK[severity[a]])
+        .map((c) => (
+          <CategoryChip key={c} category={c} tinted />
+        ))}
     </span>
   );
 }

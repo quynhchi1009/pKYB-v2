@@ -16,7 +16,6 @@ export type NotifyPrefs = {
   daily: Record<Severity, boolean>;
 };
 
-export type Queue = { ids: string[]; label: string; search: string };
 
 /** Who changed the org-wide severity mapping last, and what they changed. */
 export type SeverityChange = { summary: string; by: string; at: string };
@@ -39,8 +38,6 @@ type Store = {
   reviewWithUndo: (eventIds: string[], label?: string, body?: string) => void;
   reports: Record<string, "generating" | "ready">;
   /** The list the analyst opened a company from, so the company page can offer "Next". */
-  queue: Queue | null;
-  setQueue: (q: Queue | null) => void;
   requestReport: (monitorId: string) => void;
   toasts: Toast[];
   toast: (t: Omit<Toast, "id">) => void;
@@ -60,7 +57,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [reports, setReports] = useState<Record<string, "generating" | "ready">>({});
-  const [queue, setQueue] = useState<Queue | null>(null);
   const seq = useRef(0);
 
   // Toasts dismiss themselves (see Toasts in ui.tsx) so a hover or focus can pause the timer.
@@ -138,13 +134,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       reviewWithUndo,
       reports,
       requestReport,
-      queue,
-      setQueue,
       toasts,
       toast,
       dismissToast,
     }),
-    [monitors, severity, severityChange, prefs, toasts, toast, dismissToast, setReviewed, reviewWithUndo, reports, requestReport, queue],
+    [monitors, severity, severityChange, prefs, toasts, toast, dismissToast, setReviewed, reviewWithUndo, reports, requestReport],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

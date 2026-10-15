@@ -10,9 +10,13 @@ import {
   SEVERITY_RANK,
   RECENT_DAYS,
   STATUS_COPY,
+  TODAY,
+  addDays,
+  iso,
   isRecent,
   jurisdictionByCode,
   worstSeverity,
+  type Category,
   type ChangeEvent,
   type Company,
   type Monitor,
@@ -20,14 +24,14 @@ import {
   type Severity,
 } from "../data/model";
 import { useStore } from "../state/store";
-import { applyFilters, buildRow, describeFilters, filtersFromParams, type Filters, type Row } from "../data/queue";
+import { applyFilters, buildRow, filtersFromParams, type Filters, type Row } from "../data/queue";
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
-import { Button, CategoryChip, EventSeverity, Flag, Menu, SEV_STYLE, Select, cx, formatDate, formatDateLong, nf } from "../components/ui";
+import { Button, ChangeChips, Flag, Menu, SEV_STYLE, Select, cx, formatDate, nf } from "../components/ui";
 
 type Tab = "active" | "feed" | "history";
 type Update = (patch: Record<string, string | null>) => void;
-const FILTER_KEYS = ["q", "jur", "sev", "cat", "recent", "sort", "day", "status", "alerts"];
+const FILTER_KEYS = ["q", "jur", "sev", "cat", "range", "from", "to", "sort", "fsort", "status", "alerts"];
 const TABS: Array<[Tab, string, string]> = [
   ["active", "Active monitors", "Active"],
   ["feed", "Change feed", "Feed"],
@@ -57,7 +61,6 @@ export function Monitoring() {
       { replace: true },
     );
   const setTab = (t: Tab) => update({ tab: t === "active" ? null : t });
-  const day = params.get("day");
   const status = (params.get("status") as MonitorStatus | null) ?? "all";
 
   const active = useMemo(() => monitors.filter((m) => m.status === "active"), [monitors]);
@@ -132,7 +135,7 @@ export function Monitoring() {
             value={active.length}
             label="Total monitored"
             icon={Building2}
-            onClick={() => update({ tab: null, sev: null, recent: null })}
+            onClick={() => update({ tab: null, sev: null })}
           />
           {(["high", "medium", "low"] as Severity[]).map((s) => {
             const pressed = tab === "active" && f.sev === s;
@@ -144,7 +147,7 @@ export function Monitoring() {
                 icon={SEV_ICON[s]}
                 severity={s}
                 pressed={pressed}
-                onClick={() => (pressed ? update({ sev: null, recent: null }) : update({ tab: null, recent: "1", sev: s }))}
+                onClick={() => (pressed ? update({ sev: null }) : update({ tab: null, sev: s }))}
               />
             );
           })}
@@ -200,22 +203,9 @@ export function Monitoring() {
         data-dir={tabDir.current}
         className={cx(tabDir.current !== 0 && "tab-panel-in")}
       >
-        {tab === "active" && <ActiveTable rows={rows} f={f} update={update} page={Number(params.get("page") ?? 0)} search={params.toString()} />}
+        {tab === "active" && <ActiveTable rows={rows} f={f} update={update} page={Number(params.get("page") ?? 0)} />}
         {tab === "feed" && (
-          <ChangeFeed
-            rows={rows}
-            day={day}
-            setDay={(d) => update({ day: d })}
-            jur={f.jur}
-            setJur={(v) => update({ jur: v })}
-            sev={f.sev}
-            setSev={(v) => update({ sev: v })}
-            cat={f.cat}
-            setCat={(v) => update({ cat: v })}
-            alertsOnly={params.get("alerts") === "1"}
-            clearAlerts={() => update({ alerts: null })}
-            search={params.toString()}
-          />
+          <ChangeFeed rows={rows} params={params} update={update} />
         )}
         {tab === "history" && <OrderHistory status={status} setStatus={(v) => update({ status: v })} />}
       </div>
@@ -312,22 +302,20 @@ function Pager({ page, setPage, total }: { page: number; setPage: (n: number) =>
   );
 }
 
-function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filters; update: Update; page: number; search: string }) {
+function ActiveTable({ rows, f: params, update, page }: { rows: Row[]; f: Filters; update: Update; page: number }) {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [stopping, setStopping] = useState<Array<{ id: string; name: string }>>([]);
+  // The overview only filters by search, jurisdiction and the severity cards. Category and the 30-day window live on the
+  // Change feed, so they're ignored here; a severity card always means "most severe change in the last 30 days".
+  const f: Filters = { ...params, cat: "all", recent: params.sev !== "all" };
   const { q, jur, sev, cat, recent: onlyRecent, sort } = f;
-  const { setQueue, severity } = useStore();
+  const { severity } = useStore();
   const setPage = (n: number) => update({ page: n ? String(n) : null });
   const setSort = (v: "severity" | "date") => update({ sort: v === "severity" ? null : v });
 
   const filtered = useMemo(() => applyFilters(rows, f), [rows, q, jur, sev, cat, onlyRecent, sort]);
-  // Opening a company from here remembers this list, so the company page can step through it.
-  const remember = () => setQueue({ ids: filtered.map((r) => r.m.id), label: describeFilters(f), search });
-  const open = (id: string) => {
-    remember();
-    navigate(`/pkyb/monitoring/${id}`);
-  };
+  const open = (id: string) => navigate(`/pkyb/monitoring/${id}`);
   const pageRows = filtered.slice(page * PAGE, (page + 1) * PAGE);
   const selectedMix = useMemo(() => {
     const mix: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
@@ -343,19 +331,15 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
       else n.add(id);
       return n;
     });
-  const filtersOn = q || jur !== "all" || sev !== "all" || cat !== "all" || onlyRecent;
+  const filtersOn = q || jur !== "all" || sev !== "all";
 
   return (
     <>
       {/* Severity is filtered by the summary cards above, so the bar carries no second severity control. */}
-      <FilterBar q={q} setQ={(v) => update({ q: v })} jur={jur} setJur={(v) => update({ jur: v })} cat={cat} setCat={(v) => update({ cat: v })}>
-        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-[4px] border border-interactive-secondary bg-white px-3 text-[13px] select-none max-sm:h-11">
-          <input type="checkbox" checked={onlyRecent} onChange={(e) => update({ recent: e.target.checked ? "1" : null })} className="size-4 accent-interactive-primary" />
-          Changed in last {RECENT_DAYS} days
-        </label>
+      <FilterBar q={q} setQ={(v) => update({ q: v })} jur={jur} setJur={(v) => update({ jur: v })}>
         {filtersOn && (
           <button
-            onClick={() => update({ q: null, jur: null, sev: null, cat: null, recent: null })}
+            onClick={() => update({ q: null, jur: null, sev: null })}
             className="inline-flex h-9 items-center gap-1 px-1 text-[13px] font-semibold text-content-link hover:underline max-sm:h-11"
           >
             <X className="size-3.5" /> Clear filters
@@ -400,19 +384,17 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
                 <button role="checkbox" aria-checked={isSel} aria-label={`Select ${r.m.name}`} onClick={() => toggle(r.m.id)} className="-mx-3 -my-2.5 grid size-11 shrink-0 place-items-center text-content-tertiary">
                   {isSel ? <SquareCheck className="size-4 text-interactive-primary" aria-hidden /> : <Square className="size-4" aria-hidden />}
                 </button>
-                <Link to={`/pkyb/monitoring/${r.m.id}`} onClick={remember} className="min-w-0 flex-1">
+                <Link to={`/pkyb/monitoring/${r.m.id}`} className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className={cx("truncate text-[14px] text-content-primary", r.recent > 0 ? "font-semibold" : "font-medium")}>{r.m.name}</span>
                   </span>
                   <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-content-tertiary">
-                    <Flag code={j.code} /> {j.name} · <span className="tnum">{r.latest ? `Detected ${formatDate(r.latest.date)}` : `Checked ${formatDate(r.m.lastChecked)}`}</span>
+                    <Flag code={j.code} /> {j.name}
+                    {r.latest && <> · <span className="tnum">Detected {formatDate(r.latest.date)}</span></>}
                   </span>
                   {r.latest && r.latestSev ? (
-                    <span className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <EventSeverity event={r.latest} size="sm" />
-                      {r.latest.categories.map((c) => (
-                        <CategoryChip key={c} category={c} />
-                      ))}
+                    <span className="mt-2 block">
+                      <ChangeChips categories={r.latest.categories} />
                     </span>
                   ) : (
                     <span className="mt-2 block text-[12px] text-content-tertiary">No changes since baseline</span>
@@ -456,17 +438,8 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
                 </th>
                 <th className="px-3 py-2.5 font-semibold">Company</th>
                 <th className="px-3 py-2.5 font-semibold">Jurisdiction</th>
-                <th className="px-3 py-1.5 font-semibold" aria-sort={sort === "severity" ? "descending" : "none"}>
-                  <button onClick={() => setSort("severity")} title="Sort by severity, most severe first" className={cx("inline-flex h-6 items-center gap-1", sort === "severity" && "text-content-primary")}>
-                    Change by severity {sort === "severity" ? <ArrowDown className="size-3.5" aria-hidden /> : <ArrowUpDown className="size-3.5 text-content-tertiary" aria-hidden />}
-                  </button>
-                </th>
-                <th className="px-3 py-1.5 font-semibold" aria-sort={sort === "date" ? "descending" : "none"}>
-                  <button onClick={() => setSort("date")} title="Sort by date detected, newest first" className={cx("inline-flex h-6 items-center gap-1", sort === "date" && "text-content-primary")}>
-                    Detected {sort === "date" ? <ArrowDown className="size-3.5" aria-hidden /> : <ArrowUpDown className="size-3.5 text-content-tertiary" aria-hidden />}
-                  </button>
-                </th>
-                <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Last checked</th>
+                <SortTh label="Change by severity" active={sort === "severity"} title="Sort by severity, most severe first" onClick={() => setSort("severity")} />
+                <SortTh label="Detected" active={sort === "date"} title="Sort by date detected, newest first" onClick={() => setSort("date")} />
                 <th className="w-[112px] py-2.5 pr-4" />
               </tr>
             </thead>
@@ -498,21 +471,15 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
                     </td>
                     <td className="px-3 py-3">
                       {r.latest && r.latestSev ? (
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <EventSeverity event={r.latest} size="sm" />
-                          {r.latest.categories.map((c) => (
-                            <CategoryChip key={c} category={c} />
-                          ))}
-                        </span>
+                        <ChangeChips categories={r.latest.categories} />
                       ) : (
                         <span className="text-content-tertiary">No changes since baseline</span>
                       )}
                     </td>
                     <td className="px-3 py-3.5 whitespace-nowrap text-content-main tnum">{r.latest ? formatDate(r.latest.date) : "—"}</td>
-                    <td className="px-3 py-3.5 whitespace-nowrap text-content-tertiary tnum">{formatDate(r.m.lastChecked)}</td>
                     <td className="py-2.5 pr-3" onClick={(e) => e.stopPropagation()}>
                       <span className="flex items-center justify-end gap-1">
-                        <Link to={`/pkyb/monitoring/${r.m.id}`} onClick={remember} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
+                        <Link to={`/pkyb/monitoring/${r.m.id}`} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
                           View
                         </Link>
                         <Menu
@@ -527,7 +494,7 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
               })}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center">
+                  <td colSpan={6} className="px-4 py-14 text-center">
                     <p className="text-[14px] font-semibold">No monitors match these filters</p>
                     <p className="mt-1 text-[13px] text-content-main">Try another jurisdiction or severity, or clear filters to see all {nf.format(rows.length)} active monitors.</p>
                   </td>
@@ -547,125 +514,176 @@ function ActiveTable({ rows, f, update, page, search }: { rows: Row[]; f: Filter
 
 /* ---------------------------------------------------------------- Change feed */
 
-function ChangeFeed({
-  rows,
-  day,
-  setDay,
-  jur,
-  setJur,
-  sev,
-  setSev,
-  cat,
-  setCat,
-  alertsOnly,
-  clearAlerts,
-  search,
-}: {
-  rows: Row[];
-  day: string | null;
-  setDay: (d: string | null) => void;
-  jur: string;
-  setJur: (v: string) => void;
-  sev: "all" | Severity;
-  setSev: (v: "all" | Severity) => void;
-  cat: string;
-  setCat: (v: string) => void;
-  /** Only recent changes at the severities the analyst gets in-app alerts for: exactly what the bell counts. */
-  alertsOnly: boolean;
-  clearAlerts: () => void;
-  search: string;
-}) {
+type DateRange = "all" | "7" | "30" | "90" | "custom";
+const DATE_RANGES: Array<{ value: DateRange; label: string }> = [
+  { value: "all", label: "All dates" },
+  { value: "7", label: "Last 7 days" },
+  { value: "30", label: "Last 30 days" },
+  { value: "90", label: "Last 90 days" },
+  { value: "custom", label: "Custom range" },
+];
+
+function SortTh({ label, active, title, onClick }: { label: string; active: boolean; title: string; onClick: () => void }) {
+  return (
+    <th className="px-3 py-1.5 font-semibold" aria-sort={active ? "descending" : "none"}>
+      <button onClick={onClick} title={title} className={cx("inline-flex h-6 items-center gap-1", active && "text-content-primary")}>
+        {label} {active ? <ArrowDown className="size-3.5" aria-hidden /> : <ArrowUpDown className="size-3.5 text-content-tertiary" aria-hidden />}
+      </button>
+    </th>
+  );
+}
+
+function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchParams; update: Update }) {
   const { severity, prefs } = useStore();
-  const [page, setPage] = useState(0);
+  const navigate = useNavigate();
+  const { q, jur, sev, cat } = filtersFromParams(params);
+  const range = (params.get("range") as DateRange | null) ?? "all";
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  const sort = params.get("fsort") === "severity" ? "severity" : "date";
+  /** Only recent changes at the severities the analyst gets in-app alerts for: exactly what the bell counts. */
+  const alertsOnly = params.get("alerts") === "1";
+  const page = Number(params.get("page") ?? 0);
+  const setPage = (n: number) => update({ page: n ? String(n) : null });
+
   const events = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const since = range === "all" || range === "custom" ? "" : iso(addDays(TODAY, -Number(range)));
+    const lo = range === "custom" ? from : since;
+    const hi = range === "custom" ? to : "";
     const out: Array<{ e: ChangeEvent; m: Monitor; s: Severity }> = [];
-    for (const r of rows)
-      for (const e of r.m.events) {
+    for (const r of rows) {
+      const m = r.m;
+      if (needle && !(m.name.toLowerCase().includes(needle) || m.regNo.toLowerCase().includes(needle) || (m.localName ?? "").includes(needle))) continue;
+      if (jur !== "all" && m.jurisdiction !== jur) continue;
+      for (const e of m.events) {
         if (alertsOnly && !isRecent(e)) continue;
-        if (day && e.date !== day) continue;
-        if (jur !== "all" && r.m.jurisdiction !== jur) continue;
-        if (cat !== "all" && !e.categories.includes(cat as never)) continue;
+        if ((lo && e.date < lo) || (hi && e.date > hi)) continue;
+        if (cat !== "all" && !e.categories.includes(cat as Category)) continue;
         const s = worstSeverity(e.categories, severity);
         if (alertsOnly && !prefs.inApp[s]) continue;
         if (sev !== "all" && s !== sev) continue;
-        out.push({ e, m: r.m, s });
+        out.push({ e, m, s });
       }
-    return out.sort((a, b) => (a.e.date === b.e.date ? SEVERITY_RANK[b.s] - SEVERITY_RANK[a.s] : a.e.date < b.e.date ? 1 : -1));
-  }, [rows, day, jur, sev, cat, severity, alertsOnly, prefs]);
-  useEffect(() => setPage(0), [day, jur, sev, cat, alertsOnly]);
-  const { setQueue } = useStore();
-  const rememberFeed = () =>
-    setQueue({ ids: [...new Set(events.map((x) => x.m.id))], label: day ? `Change feed · ${formatDate(day)}` : "Change feed", search });
+    }
+    const byDate = (a: (typeof out)[number], b: (typeof out)[number]) => (a.e.date === b.e.date ? 0 : a.e.date < b.e.date ? 1 : -1);
+    const bySev = (a: (typeof out)[number], b: (typeof out)[number]) => SEVERITY_RANK[b.s] - SEVERITY_RANK[a.s];
+    return out.sort((a, b) => (sort === "date" ? byDate(a, b) || bySev(a, b) : bySev(a, b) || byDate(a, b)));
+  }, [rows, q, jur, sev, cat, range, from, to, sort, severity, alertsOnly, prefs]);
+
+  const open = (id: string) => navigate(`/pkyb/monitoring/${id}`);
   const slice = events.slice(page * PAGE, (page + 1) * PAGE);
-  const groups: Array<[string, typeof slice]> = [];
-  for (const it of slice) {
-    const g = groups[groups.length - 1];
-    if (g && g[0] === it.e.date) g[1].push(it);
-    else groups.push([it.e.date, [it]]);
-  }
+  const filtersOn = q || jur !== "all" || sev !== "all" || cat !== "all" || range !== "all" || alertsOnly;
 
   return (
     <>
-      <FilterBar jur={jur} setJur={setJur} sev={sev} setSev={setSev} cat={cat} setCat={setCat}>
+      <FilterBar
+        q={q}
+        setQ={(v) => update({ q: v })}
+        jur={jur}
+        setJur={(v) => update({ jur: v })}
+        sev={sev}
+        setSev={(v) => update({ sev: v })}
+        cat={cat}
+        setCat={(v) => update({ cat: v })}
+      >
+        <Select
+          label="Date detected"
+          value={range}
+          onChange={(v) => update(v === "custom" ? { range: v } : { range: v, from: null, to: null })}
+          className="w-[150px]"
+          options={DATE_RANGES}
+        />
+        {range === "custom" && (
+          <>
+            <DateInput label="From" value={from} max={to || iso(TODAY)} onChange={(v) => update({ from: v })} />
+            <DateInput label="To" value={to} min={from} max={iso(TODAY)} onChange={(v) => update({ to: v })} />
+          </>
+        )}
         {alertsOnly && (
           <span className="inline-flex h-9 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-1.5 pl-3 text-[13px] font-semibold text-interactive-control">
             Your in-app alerts
-            <button aria-label="Show all changes" onClick={clearAlerts} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
+            <button aria-label="Show all changes" onClick={() => update({ alerts: null })} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
               <X className="size-3.5" />
             </button>
           </span>
         )}
-        {day && (
-          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-1.5 pl-3 text-[13px] font-semibold text-interactive-control">
-            {formatDateLong(day)}
-            <button aria-label="Clear day" onClick={() => setDay(null)} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
-              <X className="size-3.5" />
-            </button>
-          </span>
+        {filtersOn && (
+          <button
+            onClick={() => update({ q: null, jur: null, sev: null, cat: null, range: null, from: null, to: null, alerts: null })}
+            className="inline-flex h-9 items-center gap-1 px-1 text-[13px] font-semibold text-content-link hover:underline max-sm:h-11"
+          >
+            <X className="size-3.5" /> Clear filters
+          </button>
         )}
       </FilterBar>
+
       <div className="rounded-[6px] border border-border-subtle bg-white">
-        {groups.map(([date, items]) => (
-          <section key={date} aria-label={formatDateLong(date)}>
-            <h2 className="sticky top-[76px] z-[1] border-b border-border-subtle bg-base-contrast px-4 py-2 first:rounded-t-[6px] text-[12px] font-semibold text-content-main">{formatDateLong(date)}</h2>
-            <ul className="divide-y divide-border-subtle">
-              {items.map(({ e, m }) => (
-                <li key={e.id} className="relative grid gap-2 px-4 py-3 hover:bg-base-contrast sm:grid-cols-[104px_minmax(0,1fr)] sm:items-center sm:gap-4">
-                    <span>
-                      <EventSeverity event={e} size="sm" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2">
-                        <Flag code={m.jurisdiction} />
-                        <Link
-                          to={`/pkyb/monitoring/${m.id}`}
-                          onClick={rememberFeed}
-                          title={m.name}
-                          className="truncate text-[14px] font-semibold text-content-primary hover:underline after:absolute after:inset-0"
-                        >
-                          {m.name}
-                        </Link>
+        <ul className="divide-y divide-border-subtle md:hidden">
+          {slice.map(({ e, m }) => {
+            const j = jurisdictionByCode[m.jurisdiction];
+            return (
+              <li key={e.id} className="px-4 py-3.5">
+                <Link to={`/pkyb/monitoring/${m.id}`} className="block min-w-0">
+                  <span className="block truncate text-[14px] font-semibold text-content-primary">{m.name}</span>
+                  <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-content-tertiary">
+                    <Flag code={j.code} /> {j.name} · <span className="tnum">Detected {formatDate(e.date)}</span>
+                  </span>
+                  <span className="mt-2 block">
+                    <ChangeChips categories={e.categories} />
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="overflow-x-auto max-md:hidden">
+          <table className="w-full min-w-[960px] text-left text-[13px]">
+            <thead className="border-b border-border-subtle text-[12px] text-content-main">
+              <tr>
+                <th className="px-4 py-2.5 font-semibold">Company</th>
+                <th className="px-3 py-2.5 font-semibold">Jurisdiction</th>
+                <SortTh label="Change by severity" active={sort === "severity"} title="Sort by severity, most severe first" onClick={() => update({ fsort: "severity" })} />
+                <SortTh label="Detected" active={sort === "date"} title="Sort by date detected, newest first" onClick={() => update({ fsort: null })} />
+                <th className="w-[112px] py-2.5 pr-4">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-subtle">
+              {slice.map(({ e, m }) => {
+                const j = jurisdictionByCode[m.jurisdiction];
+                return (
+                  <tr key={e.id} onClick={() => open(m.id)} className="cursor-pointer align-top transition-colors hover:bg-base-contrast">
+                    <td className="max-w-[300px] px-4 py-3">
+                      <span className="block truncate text-[14px] font-semibold text-content-primary">{m.name}</span>
+                      <span className="block text-[12px] text-content-tertiary tnum">{m.regNo}</span>
+                    </td>
+                    <td className="px-3 py-3.5 whitespace-nowrap">
+                      <span className="flex items-center gap-2 text-content-main">
+                        <Flag code={j.code} /> {j.name}
                       </span>
-                      <span className="mt-1.5 flex flex-wrap gap-1.5">
-                        {e.categories.map((c) => (
-                          <CategoryChip key={c} category={c} />
-                        ))}
-                      </span>
-                    </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+                    </td>
+                    <td className="px-3 py-3">
+                      <ChangeChips categories={e.categories} />
+                    </td>
+                    <td className="px-3 py-3.5 whitespace-nowrap text-content-main tnum">{formatDate(e.date)}</td>
+                    <td className="py-2.5 pr-4 text-right" onClick={(ev) => ev.stopPropagation()}>
+                      <Link to={`/pkyb/monitoring/${m.id}`} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {events.length === 0 && (
           <div className="px-4 py-14 text-center">
-            <p className="text-[14px] font-semibold">{day || jur !== "all" || sev !== "all" || cat !== "all" || alertsOnly ? "No changes match" : "No changes yet"}</p>
+            <p className="text-[14px] font-semibold">{filtersOn ? "No changes match" : "No changes yet"}</p>
             <p className="mt-1 text-[13px] text-content-main">
-              {day
-                ? "Nothing was detected on this day for these filters."
-                : jur !== "all" || sev !== "all" || cat !== "all" || alertsOnly
-                  ? "Adjust the filters to see more of the feed."
-                  : "Registry changes across your monitored companies will be listed here as they're detected."}
+              {filtersOn ? "Adjust the filters to see more of the feed." : "Registry changes across your monitored companies will be listed here as they're detected."}
             </p>
           </div>
         )}
@@ -674,6 +692,22 @@ function ChangeFeed({
         </div>
       </div>
     </>
+  );
+}
+
+function DateInput({ label, value, min, max, onChange }: { label: string; value: string; min?: string; max?: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[12px] font-medium text-content-main">{label}</span>
+      <input
+        type="date"
+        value={value}
+        min={min || undefined}
+        max={max}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9 rounded-[4px] border border-interactive-secondary bg-white px-2.5 text-[13px] text-content-primary hover:border-content-main focus:border-interactive-primary max-sm:h-11 max-sm:text-[16px]"
+      />
+    </label>
   );
 }
 

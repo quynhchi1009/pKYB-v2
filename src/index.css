@@ -238,3 +238,15 @@ dialog[open] {
     animation-duration: 160ms !important;
   }
 }
+
+/* Monitor details popover on the company page: drops 4px from under its badge, origin at the badge. */
+.popover-in {
+  transform-origin: top left;
+  animation: popover-in 180ms var(--ease-out-expo);
+}
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}

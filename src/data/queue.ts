@@ -1,6 +1,6 @@
-// Shared triage logic: the Monitoring table and the company page's queue bar must agree on
-// which monitors match a filter and in what order, so both read from here.
-import { CATEGORY_LABEL, RECENT_DAYS, SEVERITY_LABEL, SEVERITY_RANK, isRecent, worstSeverity, type Category, type ChangeEvent, type Monitor, type Severity, type SeverityMap } from "./model";
+// Shared triage logic: the Monitoring table and Severity Settings must agree on how a monitor's
+// featured change and severity are worked out, so both read from here.
+import { SEVERITY_RANK, isRecent, worstSeverity, type Category, type ChangeEvent, type Monitor, type Severity, type SeverityMap } from "./model";
 
 export type Row = {
   m: Monitor;
@@ -58,15 +58,4 @@ export function applyFilters(rows: Row[], f: Filters): Row[] {
   const byDate = (a: Row, b: Row) => ((b.latest?.date ?? "") > (a.latest?.date ?? "") ? 1 : (b.latest?.date ?? "") < (a.latest?.date ?? "") ? -1 : 0);
   out.sort((a, b) => (f.sort === "severity" ? rank(b) - rank(a) || byDate(a, b) : byDate(a, b)));
   return out;
-}
-
-/** Short human label for a filter set, e.g. "High · Last 30 days". */
-export function describeFilters(f: Filters): string {
-  const parts: string[] = [];
-  if (f.sev !== "all") parts.push(SEVERITY_LABEL[f.sev]);
-  if (f.cat !== "all") parts.push(CATEGORY_LABEL[f.cat as Category]);
-  if (f.recent) parts.push(`Last ${RECENT_DAYS} days`);
-  if (f.jur !== "all") parts.push(f.jur);
-  if (f.q.trim()) parts.push(`“${f.q.trim()}”`);
-  return parts.length ? parts.join(" · ") : "All active monitors";
 }

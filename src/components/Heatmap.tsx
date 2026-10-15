@@ -1,7 +1,8 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { TODAY, addDays, iso } from "../data/model";
 
-export type HeatCell = { fill: string; label: string; active?: boolean };
+/** `dim` fades a day outside the caller's current date filter, so the grid shows which part of the year the list below covers. */
+export type HeatCell = { fill: string; label: string; active?: boolean; dim?: boolean };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -65,8 +66,11 @@ export function Heatmap({
   }, [weeks]);
 
   const step = size + gap;
-  const top = 18;
-  const left = 26;
+  // Axis labels grow a little with the cells, so a large grid doesn't carry footnote-sized months.
+  const monthFont = size >= 16 ? 11 : 10;
+  const dayFont = size >= 16 ? 10 : 9;
+  const top = size >= 16 ? 20 : 18;
+  const left = size >= 16 ? 30 : 26;
   const width = left + weeks * step;
   const height = top + 7 * step;
 
@@ -113,12 +117,12 @@ export function Heatmap({
           onMouseLeave={() => setHover(null)}
         >
           {monthMarks.map((m) => (
-            <text key={m.col} x={left + m.col * step} y={11} className="fill-content-tertiary" fontSize={10}>
+            <text key={m.col} x={left + m.col * step} y={11} className="fill-content-tertiary" fontSize={monthFont}>
               {m.label}
             </text>
           ))}
           {["Mon", "Wed", "Fri"].map((d, i) => (
-            <text key={d} x={0} y={top + i * 2 * step + size - 2} className="fill-content-tertiary" fontSize={9}>
+            <text key={d} x={0} y={top + i * 2 * step + size - 3} className="fill-content-tertiary" fontSize={dayFont}>
               {d}
             </text>
           ))}
@@ -138,9 +142,10 @@ export function Heatmap({
                 height={size}
                 rx={2}
                 fill={c.fill}
+                opacity={c.dim ? 0.28 : 1}
                 stroke={isSel ? "var(--color-background-system)" : "transparent"}
                 strokeWidth={isSel ? 1.5 : 0}
-                style={{ cursor: interactive ? "pointer" : "default" }}
+                style={{ cursor: interactive ? "pointer" : "default", transition: "opacity 200ms var(--ease-out-expo, ease-out)" }}
                 className={interactive ? "focus-visible:outline-none" : undefined}
                 role={interactive ? "button" : undefined}
                 aria-label={interactive ? c.label : undefined}
