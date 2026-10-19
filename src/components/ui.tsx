@@ -344,7 +344,7 @@ export function Menu({
                     it.onSelect();
                   }}
                   className={cx(
-                    "flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-background-subtle focus-visible:bg-background-subtle focus-visible:outline-none",
+                    "flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-background-subtle focus-visible:bg-background-subtle focus-visible:rounded-[4px] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-interactive-primary",
                     it.danger ? "text-high" : "text-content-primary",
                   )}
                 >

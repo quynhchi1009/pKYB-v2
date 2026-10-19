@@ -183,7 +183,7 @@ export function ViewReports() {
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <span className="text-[14px] text-content-primary">Custom Date Range:</span>
-              <div className="flex h-10 items-center gap-2 rounded-[4px] border border-border-subtle bg-white px-3 focus-within:border-interactive-primary max-sm:h-11">
+              <div className="flex h-10 items-center gap-2 rounded-[4px] border border-border-subtle bg-white px-3 focus-within:border-interactive-primary has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-interactive-primary max-sm:h-11">
                 <CalendarDays className="size-4 shrink-0 text-content-tertiary" aria-hidden />
                 <DateInput label="Start date" value={draft.from} max={draft.to || iso(TODAY)} onChange={(from) => setDraft((d) => ({ ...d, from, range: from || d.to ? "custom" : "any" }))} />
                 <span className="text-[13px] text-content-main">to</span>

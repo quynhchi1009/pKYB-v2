@@ -99,15 +99,16 @@ function NotificationBell() {
               <button
                 onClick={() => {
                   setOpen(false);
-                  openSettings("notifications");
+                  // The popover closes as settings open, so focus returns to the bell instead.
+                  openSettings("notifications", trigger.current);
                 }}
                 className="text-[12px] text-content-link hover:underline"
               >
-                Alert settings
+                Choose alerts
               </button>
             </div>
             <ul className="max-h-[360px] overflow-y-auto">
-              {items.length === 0 && <li className="px-4 py-6 text-center text-[13px] text-content-main">No alerts in the last {RECENT_DAYS} days at the severities you chose in Alert settings.</li>}
+              {items.length === 0 && <li className="px-4 py-6 text-center text-[13px] text-content-main">No alerts in the last {RECENT_DAYS} days at the severities you chose in Severity & alerts.</li>}
               {items.slice(0, 8).map((n) => (
                 <li key={n.id}>
                   <Link

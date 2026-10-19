@@ -1,4 +1,4 @@
-// Shared triage logic: the Monitoring table and Severity Settings must agree on how a monitor's
+// Shared triage logic: the Monitoring table and Severity & alerts must agree on how a monitor's
 // featured change and severity are worked out, so both read from here.
 import { SEVERITY_RANK, isRecent, worstSeverity, type Category, type ChangeEvent, type Monitor, type Severity, type SeverityMap } from "./model";
 

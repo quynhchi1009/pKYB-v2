@@ -213,7 +213,7 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                   })}
                 </ul>
                 <button onClick={() => openSettings("severity")} className="mt-3 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
-                  <SlidersHorizontal className="size-3.5" /> Adjust severity mapping
+                  <SlidersHorizontal className="size-3.5" /> Adjust severity
                 </button>
               </section>
             )}
@@ -232,9 +232,9 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                 </div>
                 <p className="mt-2 max-w-[64ch] text-[14px] text-content-main">
                   {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."} Checks run automatically, and you'll be alerted in-app and by email
-                  based on your{" "}
-                  <button onClick={() => openSettings("severity")} className="font-semibold text-content-link hover:underline">
-                    severity settings
+                  based on your settings in{" "}
+                  <button onClick={() => openSettings("notifications")} className="font-semibold text-content-link hover:underline">
+                    Severity & alerts
                   </button>
                   . New changes will be listed here.
                 </p>

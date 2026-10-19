@@ -106,7 +106,7 @@ export function PkybInfoDialog({
               }}
               className="font-semibold text-content-link hover:underline"
             >
-              Severity Settings
+              Severity & alerts
             </button>
           </dd>
         </div>

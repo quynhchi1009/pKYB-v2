@@ -28,7 +28,7 @@ import { applyFilters, buildRow, filtersFromParams, type Filters, type Row } fro
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { Button, ChangeChips, Flag, Menu, SEV_STYLE, Select, cx, formatDate, nf } from "../components/ui";
-import { SettingsMenu, SettingsVariantSwitch } from "../components/SettingsPanel";
+import { SettingsButton, SettingsVariantSwitch } from "../components/SettingsPanel";
 
 type Tab = "active" | "feed" | "history";
 type Update = (patch: Record<string, string | null>) => void;
@@ -126,7 +126,7 @@ export function Monitoring() {
           <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em]">Overview</h1>
           <p className="mt-1 text-[14px] text-content-main">Registry changes across the companies you monitor. Checks run automatically.</p>
         </div>
-        <SettingsMenu />
+        <SettingsButton />
       </header>
       <SettingsVariantSwitch />
 

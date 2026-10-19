@@ -153,7 +153,7 @@ export function CreateMonitorDialog({ company, onClose, order }: { company: Comp
                         );
                       })}
                     </ul>
-                    {/* Just enough to know severity exists; the mapping itself lives in Severity Settings. */}
+                    {/* Just enough to know severity exists; the mapping itself lives in Severity & alerts. */}
                     <p className="mt-3 text-[13px] text-content-tertiary italic">Severity can be applied to each of the change categories.</p>
                   </section>
 

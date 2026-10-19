@@ -37,7 +37,7 @@ type Store = {
   /** Recolours the app with an unsaved mapping (the side-panel settings variant); null ends the preview. */
   previewSeverity: (map: SeverityMap | null) => void;
   previewing: boolean;
-  /** Prototype review switch for how Severity & Notification settings open: A, a modal popup; B, a right side panel. */
+  /** Prototype review switch for how Severity & alerts opens: A, a modal popup; B, a right side panel. */
   settingsVariant: "a" | "b";
   setSettingsVariant: (v: "a" | "b") => void;
   /** Replaces the whole mapping and records who changed it, so the page can show attribution. */

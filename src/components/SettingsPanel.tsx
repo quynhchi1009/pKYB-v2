@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Bell, Check, ChevronDown, Eye, RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { Bell, Check, ChevronDown, Eye, RotateCcw, Settings, SlidersHorizontal, X } from "lucide-react";
 import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, SEVERITIES, SEVERITY_LABEL, isRecent, worstSeverity, type Severity, type SeverityMap } from "../data/model";
 import { buildRow } from "../data/queue";
 import { useStore, type NotifyPrefs } from "../state/store";
@@ -8,9 +8,14 @@ import { Button, CATEGORY_ICON, Dialog, SEV_STYLE, cx, formatDate, nf } from "./
 
 export type SettingsSection = "severity" | "notifications";
 
+/**
+ * One name for the settings and one for each half, used everywhere: "Severity & alerts", made of "Severity" and
+ * "Alerts". The URL keeps `severity` / `notifications` so links already in the wild still open the right half.
+ */
+export const SETTINGS_NAME = "Severity & alerts";
 const SECTIONS: Array<{ id: SettingsSection; title: string; desc: string; icon: typeof Bell }> = [
-  { id: "severity", title: "Severity mapping", desc: "How serious each type of change is", icon: SlidersHorizontal },
-  { id: "notifications", title: "Notifications", desc: "In-app alerts and email digests", icon: Bell },
+  { id: "severity", title: "Severity", desc: "How serious each type of change is", icon: SlidersHorizontal },
+  { id: "notifications", title: "Alerts", desc: "In-app alerts and email digests", icon: Bell },
 ];
 const CHANNELS: Array<{ key: keyof NotifyPrefs; title: string; desc: string }> = [
   { key: "inApp", title: "In-app alerts", desc: "The bell in the top bar" },
@@ -20,15 +25,34 @@ const CHANNELS: Array<{ key: keyof NotifyPrefs; title: string; desc: string }> =
 const TIERS: Severity[] = ["high", "medium", "low"];
 const plural = (n: number, one: string, many: string) => `${nf.format(n)} ${n === 1 ? one : many}`;
 
-/** Opens Severity & Notification settings over the current page, at a section. Every settings link in the app goes through here. */
+// What opened the settings, so closing them puts keyboard focus back there; and the half last shown, which the
+// overview's button reopens. Both live for the session only.
+let opener: HTMLElement | null = null;
+let lastSection: SettingsSection = "severity";
+
+/**
+ * Opens Severity & alerts over the current page, at a section. Every settings link in the app goes through here.
+ * `returnTo` names where focus goes on close when the control that was clicked won't survive, such as a link inside
+ * a popover that closes as the settings open.
+ */
 export function useOpenSettings() {
   const [, setParams] = useSearchParams();
-  return (section: SettingsSection) =>
+  return (section: SettingsSection, returnTo?: HTMLElement | null) => {
+    opener = returnTo ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("settings", section);
       return next;
     });
+  };
+}
+
+/** Focus goes back to the opener if it is still on screen, else to the page content, never to the top of the shell. */
+function restoreFocus() {
+  const el = opener;
+  opener = null;
+  const usable = el?.isConnected && el.getClientRects().length > 0 && !el.closest("dialog:not([open]), [inert]");
+  (usable ? el : document.getElementById("main"))?.focus({ preventScroll: true });
 }
 
 /**
@@ -40,6 +64,18 @@ export function SettingsHost() {
   const { settingsVariant } = useStore();
   const raw = params.get("settings");
   const section: SettingsSection | null = raw === "notifications" ? "notifications" : raw ? "severity" : null;
+  const wasOpen = useRef(false);
+  if (section) lastSection = section;
+  // Closing by any route (Cancel, Escape, Save, Discard) lands here, so focus is restored once for all of them.
+  // It waits a frame so a closing native dialog can't move focus after us.
+  useEffect(() => {
+    if (section) wasOpen.current = true;
+    else if (wasOpen.current) {
+      wasOpen.current = false;
+      const id = requestAnimationFrame(restoreFocus);
+      return () => cancelAnimationFrame(id);
+    }
+  }, [section]);
   const set = (s: SettingsSection | null) =>
     setParams(
       (prev) => {
@@ -97,7 +133,7 @@ function useSettingsDraft(live: boolean) {
   if (impact) {
     if (mappingChanged) details.push(`${plural(impact.companies, "company changes", "companies change")} severity`);
     if (impact.before !== impact.after) details.push(`in-app alerts ${nf.format(impact.before)} → ${nf.format(impact.after)}`);
-    if (!details.length) details.push("notification preferences change");
+    if (!details.length) details.push("alert preferences change");
   }
 
   const discard = () => {
@@ -121,7 +157,7 @@ function useSettingsDraft(live: boolean) {
             ? changed.length === 1
               ? `${CATEGORY_LABEL[first]} is now ${SEVERITY_LABEL[draftMap[first]]}`
               : `${changed.length} severity changes saved`
-            : "Notification preferences saved",
+            : "Alert preferences saved",
       body: mappingChanged ? (moved ? `${plural(moved, "company changes", "companies change")} severity in Perpetual KYB.` : "No company changes severity right now.") : undefined,
       action: {
         label: "Undo",
@@ -357,12 +393,12 @@ function PopupSettings({ section, goTo, onClose }: { section: SettingsSection; g
   };
 
   return (
-    <Dialog open onClose={requestClose} title="Severity & notification settings" labelledBy="settings-title" width={920} bare>
+    <Dialog open onClose={requestClose} title={SETTINGS_NAME} labelledBy="settings-title" width={920} bare>
       <div className="flex h-[min(700px,calc(100dvh-32px))] flex-col">
         <header className="flex items-start justify-between gap-4 border-b border-border-subtle px-5 pt-5 pb-4 sm:px-6">
           <div>
             <h2 id="settings-title" className="text-[18px] leading-snug font-semibold">
-              Severity & notification settings
+              {SETTINGS_NAME}
             </h2>
             <p className="mt-0.5 text-[13px] text-content-main">Choose how serious each type of change is, and when you're told about it.</p>
           </div>
@@ -411,7 +447,7 @@ function PopupSettings({ section, goTo, onClose }: { section: SettingsSection; g
           <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${section}`} className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6">
             {section === "severity" ? (
               <>
-                <SectionIntro title="Category severity mapping">
+                <SectionIntro title="Severity by category">
                   Every change carries one or more of these categories. A change takes the colour of its most serious category, across the overview, the
                   change feed, company pages and alerts.
                 </SectionIntro>
@@ -419,7 +455,7 @@ function PopupSettings({ section, goTo, onClose }: { section: SettingsSection; g
               </>
             ) : (
               <>
-                <SectionIntro title="Notifications">Pick which severities reach you on each channel. Alerts cover changes detected on companies you monitor.</SectionIntro>
+                <SectionIntro title="Alerts">Pick which severities reach you on each channel. Alerts cover changes detected on companies you monitor.</SectionIntro>
                 <NotificationMatrix d={d} />
               </>
             )}
@@ -453,7 +489,6 @@ function SidePanel({ section, goTo, onClose }: { section: SettingsSection; goTo:
   const { asking, setAsking, requestClose } = useCloseGuard(d, onClose);
   const scroller = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
-  const opener = useRef<Element | null>(null);
   const [wide, setWide] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
 
   useEffect(() => {
@@ -462,14 +497,12 @@ function SidePanel({ section, goTo, onClose }: { section: SettingsSection; goTo:
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  // Focus moves into the panel on open and back to whatever opened it on close.
+  // Focus moves into the panel on open; SettingsHost returns it to the opener on close.
   useEffect(() => {
-    opener.current = document.activeElement;
     title.current?.focus({ preventScroll: true });
     document.documentElement.dataset.settingsPanel = "open";
     return () => {
       delete document.documentElement.dataset.settingsPanel;
-      (opener.current as HTMLElement | null)?.focus?.({ preventScroll: true });
     };
   }, []);
   // Open on the section that was asked for.
@@ -497,9 +530,9 @@ function SidePanel({ section, goTo, onClose }: { section: SettingsSection; goTo:
         <header className="flex items-start justify-between gap-4 border-b border-border-subtle px-5 pt-4 pb-3">
           <div className="min-w-0">
             <h2 id="sp-title" ref={title} tabIndex={-1} className="text-[18px] leading-snug font-semibold focus:outline-none">
-              Settings
+              {SETTINGS_NAME}
             </h2>
-            <p className="text-[13px] text-content-main">Severity and notifications for your team</p>
+            <p className="text-[13px] text-content-main">How serious each change is, and when you're told</p>
           </div>
           <button onClick={requestClose} aria-label="Close settings" className="-mr-2 grid size-9 shrink-0 place-items-center rounded-[4px] text-content-tertiary hover:bg-background-subtle hover:text-content-primary">
             <X className="size-4" />
@@ -539,14 +572,14 @@ function SidePanel({ section, goTo, onClose }: { section: SettingsSection; goTo:
         <div ref={scroller} className="relative min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-8">
           <section id="sp-severity" aria-labelledby="sp-sev-h">
             <h3 id="sp-sev-h" className="text-[16px] font-semibold">
-              Category severity mapping
+              Severity by category
             </h3>
             <p className="mt-1 mb-3 text-[13px] text-content-main">A change takes the colour of its most serious category, everywhere in Perpetual KYB.</p>
             <SeverityMapping d={d} compact />
           </section>
           <section id="sp-notifications" aria-labelledby="sp-not-h" className="mt-8">
             <h3 id="sp-not-h" className="text-[16px] font-semibold">
-              Notifications
+              Alerts
             </h3>
             <p className="mt-1 mb-3 text-[13px] text-content-main">Which severities reach you on each channel.</p>
             <NotificationMatrix d={d} />
@@ -559,70 +592,18 @@ function SidePanel({ section, goTo, onClose }: { section: SettingsSection; goTo:
   );
 }
 
-/* ---------------------------------------------------------------- Settings menu (Overview header) */
+/* ---------------------------------------------------------------- Overview header button */
 
-/** The Overview's Settings dropdown: names each settings area with a line on what it controls. */
-export function SettingsMenu() {
+/**
+ * The Overview's way in. Both halves live on one surface with its own tabs, so a menu choosing between them only
+ * added a click; the button opens whichever half was shown last.
+ */
+export function SettingsButton() {
   const open = useOpenSettings();
-  const [show, setShow] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
-  const btn = useRef<HTMLButtonElement>(null);
-  const menuId = useId();
-  useEffect(() => {
-    if (!show) return;
-    const away = (e: PointerEvent) => !wrap.current?.contains(e.target as Node) && setShow(false);
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setShow(false);
-      btn.current?.focus();
-    };
-    document.addEventListener("pointerdown", away);
-    document.addEventListener("keydown", key);
-    return () => {
-      document.removeEventListener("pointerdown", away);
-      document.removeEventListener("keydown", key);
-    };
-  }, [show]);
-  useEffect(() => {
-    if (show) wrap.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
-  }, [show]);
-  const move = (e: React.KeyboardEvent) => {
-    const items = Array.from(wrap.current?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? []);
-    const i = items.indexOf(document.activeElement as HTMLElement);
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
-    } else if (e.key === "Tab") setShow(false);
-  };
-
   return (
-    <div ref={wrap} className="relative">
-      <Button ref={btn} aria-haspopup="menu" aria-expanded={show} aria-controls={menuId} onClick={() => setShow((s) => !s)}>
-        <SlidersHorizontal className="size-4" aria-hidden /> Settings
-        <ChevronDown className={cx("size-4 transition-transform duration-200 ease-out-expo", show && "rotate-180")} aria-hidden />
-      </Button>
-      {show && (
-        <div id={menuId} role="menu" aria-label="Settings" onKeyDown={move} className="popover-in absolute top-full right-0 z-30 mt-2 w-[280px] origin-top-right rounded-[6px] border border-border-subtle bg-white py-1.5 shadow-pop">
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              role="menuitem"
-              onClick={() => {
-                setShow(false);
-                open(s.id);
-              }}
-              className="flex w-full items-start gap-3 px-3.5 py-2.5 text-left hover:bg-background-subtle focus-visible:bg-background-subtle focus-visible:outline-none"
-            >
-              <s.icon className="mt-0.5 size-4 shrink-0 text-interactive-primary" aria-hidden />
-              <span>
-                <span className="block text-[14px] font-semibold text-content-primary">{s.title === "Notifications" ? "Notification settings" : "Severity settings"}</span>
-                <span className="block text-[12px] text-content-tertiary">{s.desc}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <Button variant="ghost" onClick={() => open(lastSection)} className="border border-border-subtle bg-white">
+      <Settings className="size-4" aria-hidden /> {SETTINGS_NAME}
+    </Button>
   );
 }
 
