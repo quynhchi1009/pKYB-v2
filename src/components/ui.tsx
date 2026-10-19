@@ -420,7 +420,7 @@ function ToastItem({ t, onDismiss }: { t: Toast; onDismiss: () => void }) {
 export function Toasts() {
   const { toasts, dismissToast } = useStore();
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-[min(380px,calc(100vw-32px))] flex-col gap-2" aria-live="polite">
+    <div className="toast-stack pointer-events-none fixed right-4 bottom-4 z-[60] flex w-[min(380px,calc(100vw-32px))] flex-col gap-2" aria-live="polite">
       {toasts.map((t) => (
         <ToastItem key={t.id} t={t} onDismiss={() => dismissToast(t.id)} />
       ))}

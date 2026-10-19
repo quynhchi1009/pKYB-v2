@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowDown, ArrowRight, BellRing, CircleAlert, CircleCheck, FileCheck2, Radar, SlidersHorizontal, X } from "lucide-react";
 import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, PKYB_UNSUPPORTED, PRICING, TODAY, creditsLabel, iso, jurisdictionByCode, totalTodayLabel, type Company, type Severity } from "../data/model";
 import { useStore } from "../state/store";
+import { useOpenSettings } from "./SettingsPanel";
 import { Button, CATEGORY_ICON, Dialog, Flag, cx, formatDate } from "./ui";
 
 const STEPS: Array<{ when: string; what: string; icon: typeof Radar }> = [
@@ -25,6 +26,7 @@ export type PkybOrder = { extras: string[]; onConfirm: () => void };
 
 export function CreateMonitorDialog({ company, onClose, order }: { company: Company | null; onClose: () => void; order?: PkybOrder }) {
   const { createMonitor, toast, monitors, severity } = useStore();
+  const openSettings = useOpenSettings();
   const navigate = useNavigate();
   const loc = useLocation();
   const customised = CATEGORIES.some((c) => severity[c] !== DEFAULT_SEVERITY[c]);
@@ -163,17 +165,29 @@ export function CreateMonitorDialog({ company, onClose, order }: { company: Comp
                     {customised ? (
                       <p className="mt-1 text-[13px] text-content-main">
                         Your team's severity settings apply. Change them in{" "}
-                        <Link to="/pkyb/settings" onClick={onClose} className="font-semibold text-content-link hover:underline">
+                        <button
+                          onClick={() => {
+                            onClose();
+                            openSettings("severity");
+                          }}
+                          className="font-semibold text-content-link hover:underline"
+                        >
                           Severity Settings
-                        </Link>
+                        </button>
                         .
                       </p>
                     ) : (
                       <p className="mt-1 text-[13px] text-content-main">
                         All start at <span className="font-semibold text-content-primary">Medium</span>. Change in{" "}
-                        <Link to="/pkyb/settings" onClick={onClose} className="font-semibold text-content-link hover:underline">
+                        <button
+                          onClick={() => {
+                            onClose();
+                            openSettings("severity");
+                          }}
+                          className="font-semibold text-content-link hover:underline"
+                        >
                           Severity Settings
-                        </Link>
+                        </button>
                         .
                       </p>
                     )}

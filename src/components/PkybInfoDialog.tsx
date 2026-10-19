@@ -1,7 +1,7 @@
-import { Link } from "react-router-dom";
 import { BellRing, FileCheck2, Radar } from "lucide-react";
 import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, PRICING, type Company } from "../data/model";
 import { useStore } from "../state/store";
+import { useOpenSettings } from "./SettingsPanel";
 import { Button, CATEGORY_ICON, Dialog } from "./ui";
 
 const STEPS: Array<{ when: string; what: string; icon: typeof Radar }> = [
@@ -29,6 +29,7 @@ export function PkybInfoDialog({
   onClose: () => void;
 }) {
   const { severity } = useStore();
+  const openSettings = useOpenSettings();
   const customised = CATEGORIES.some((c) => severity[c] !== DEFAULT_SEVERITY[c]);
 
   return (
@@ -98,9 +99,15 @@ export function PkybInfoDialog({
           <dt className="text-[12px] font-semibold text-content-main">Severity</dt>
           <dd className="mt-0.5 text-content-primary">
             {customised ? "Your team's settings apply. " : "Every category starts at Medium. "}
-            <Link to="/pkyb/settings" onClick={onClose} className="font-semibold text-content-link hover:underline">
+            <button
+              onClick={() => {
+                onClose();
+                openSettings("severity");
+              }}
+              className="font-semibold text-content-link hover:underline"
+            >
               Severity Settings
-            </Link>
+            </button>
           </dd>
         </div>
         <div>

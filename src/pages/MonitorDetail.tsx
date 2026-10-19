@@ -1,11 +1,12 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, LoaderCircle, Radar, SlidersHorizontal, X } from "lucide-react";
-import { PRICING, SEVERITY_LABEL, SEVERITY_RANK, TODAY, addDays, creditsLabel, iso, jurisdictionByCode, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, LoaderCircle, Radar, SlidersHorizontal, X } from "lucide-react";
+import { PRICING, STATUS_COPY, SEVERITY_LABEL, SEVERITY_RANK, TODAY, addDays, creditsLabel, iso, jurisdictionByCode, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
 import { useStore } from "../state/store";
 import { Heatmap } from "../components/Heatmap";
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
+import { useOpenSettings } from "../components/SettingsPanel";
 import { StatusBadge } from "./Monitoring";
 import { Button, ChangeChips, Dialog, Flag, SEV_STYLE, cx, formatDate, formatDateLong, nf } from "../components/ui";
 
@@ -59,6 +60,7 @@ export function MonitorDetail() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const { monitors, severity, toast, reports, requestReport } = useStore();
+  const openSettings = useOpenSettings();
   const m = monitors.find((x) => x.id === id);
   const [stopping, setStopping] = useState(false);
   const [creating, setCreating] = useState<Company | null>(null);
@@ -96,7 +98,7 @@ export function MonitorDetail() {
       <div className="mx-auto max-w-[720px] px-4 py-20 text-center">
         <p className="text-[16px] font-semibold">This monitor doesn't exist</p>
         <Link to="/pkyb/monitoring" className="mt-2 inline-block text-content-link hover:underline">
-          Back to Monitoring
+          Back to Overview
         </Link>
       </div>
     );
@@ -111,7 +113,8 @@ export function MonitorDetail() {
   const ranged = m.events.filter((e) => inRange(e.date));
   const log = day ? m.events.filter((e) => e.date === day) : ranged;
   const counts: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
-  for (const e of ranged) counts[worstSeverity(e.categories, severity)]++;
+  for (const e of log) counts[worstSeverity(e.categories, severity)]++;
+  const mixTotal = log.length;
   const rangeLabel = RANGES.find((r) => r.value === range)!.label;
   const rangeSpan = range === "all" ? `Since ${formatDate(m.createdAt)}` : `${formatDate(from!)} – ${formatDate(to ?? iso(TODAY))}`;
 
@@ -160,24 +163,38 @@ export function MonitorDetail() {
             ["Status", "Setup failed"],
           ];
 
+  const yearSummary = yearEvents.length
+    ? `${plural(yearEvents.length, "change", "changes")} on ${plural(yearDays, "day", "days")} · latest ${formatDate(yearEvents[0].date)}`
+    : "No changes in the last 365 days";
+
   return (
-    <div className="mx-auto max-w-[1360px] px-4 pt-6 pb-16 lg:px-8">
-      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+    <div className="px-4 pt-6 pb-16 sm:px-6 lg:px-8">
+      <Link to="/pkyb/monitoring" className="-ml-1 mb-3 inline-flex h-8 items-center gap-1.5 rounded-[4px] px-1 text-[13px] font-semibold text-content-link hover:underline">
+        <ArrowLeft className="size-4" aria-hidden /> Overview
+      </Link>
+      {/* The report viewer's header: name line, registration line, then a hairline. Stop sits opposite, outlined, because it confirms first. */}
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b border-portal-line pb-4">
         <div className="min-w-0">
-          {/* The flag rides on the name's last line, so a wrapped name never strands it at the far edge. */}
-          <h1 className="text-[22px] leading-tight font-semibold tracking-[-0.015em] text-balance [overflow-wrap:anywhere] sm:text-[26px]">
-            {m.name}
-            <Flag code={m.jurisdiction} className="ml-3 h-4 w-6 -translate-y-0.5 align-middle" />
+          <h1 className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-heading text-[18px] leading-tight font-bold text-content-primary [overflow-wrap:anywhere]">
+            <span>{m.name}</span>
+            {m.localName && (
+              <>
+                <span aria-hidden>|</span>
+                <span lang="zh">{m.localName}</span>
+              </>
+            )}
+            <Flag code={m.jurisdiction} className="ml-2 h-4 w-6 shrink-0" />
           </h1>
-          {m.localName && <p className="text-[16px] text-content-main [overflow-wrap:anywhere]">{m.localName}</p>}
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-content-main">
-            <MonitorDetails m={m} facts={facts} baselineReady={baselineReady} onDownloadBaseline={downloadBaseline} />
+          <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[14px] text-content-main uppercase">
             <span>
-              {j.regLabel} <span className="tnum">{m.regNo}</span> · {j.name}
+              {j.regLabel} <span className="tnum">{m.regNo}</span>
             </span>
-          </div>
+            <span aria-hidden className="text-border-neutral">
+              |
+            </span>
+            <span>{j.name}</span>
+          </p>
         </div>
-        {/* Stopping is the monitor's only action besides the report. Red outline, not fill: it confirms first and never outranks the report. */}
         {active && (
           <Button variant="danger-outline" size="sm" onClick={() => setStopping(true)}>
             <CircleStop className="size-4" aria-hidden /> Stop monitoring
@@ -187,7 +204,7 @@ export function MonitorDetail() {
 
       {/* Stopped and Inactive say so first: no checks run, and the way forward is a new monitor. */}
       {!active && (
-        <section aria-labelledby="status-h" className="mt-6 rounded-[6px] border border-border-neutral bg-white p-5 lg:p-6">
+        <section aria-labelledby="status-h" className="mt-5 rounded-[6px] border border-border-neutral bg-white p-5 lg:p-6">
           <div className="flex items-center gap-2 text-content-primary">
             {m.status === "inactive" ? <CircleAlert className="size-5 text-content-main" aria-hidden /> : <CirclePause className="size-5 text-content-main" aria-hidden />}
             <h2 id="status-h" className="text-[18px] font-semibold">
@@ -210,180 +227,24 @@ export function MonitorDetail() {
         </section>
       )}
 
-      {m.events.length === 0 ? (
-        active && (
-          <section aria-labelledby="idle-h" className="mt-6 rounded-[6px] border border-border-accent bg-interactive-accent/60 p-5 lg:p-6">
-            <div className="flex items-center gap-2 text-interactive-control">
-              {baselineReady ? <Radar className="size-5" aria-hidden /> : <LoaderCircle className="size-5 animate-spin" aria-hidden />}
-              <h2 id="idle-h" className="text-[18px] font-semibold">
-                {baselineReady ? "Monitoring is running" : "Setting up your baseline"}
-              </h2>
-            </div>
-            <p className="mt-2 max-w-[64ch] text-[14px] text-content-main">
-              {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."} Checks run automatically, and you'll be alerted in-app and by email
-              based on your{" "}
-              <Link to="/pkyb/settings" className="font-semibold text-content-link hover:underline">
-                severity settings
-              </Link>
-              . New changes will be listed here.
-            </p>
-          </section>
-        )
-      ) : (
-        <>
-          {/* The year at a glance is the page's centrepiece: when things changed, and how badly, before any row of the log. */}
-          <section aria-labelledby="heat-h" className="mt-6 rounded-[6px] border border-border-subtle bg-white px-4 pt-4 pb-3 sm:px-6 sm:pt-5 sm:pb-4">
-            <div className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-              <div>
-                <h2 id="heat-h" className="text-[18px] leading-snug font-semibold">
-                  Activity, last 365 days
-                </h2>
-                <p className="mt-0.5 text-[13px] text-content-main tnum">
-                  {yearEvents.length
-                    ? `${plural(yearEvents.length, "change", "changes")} on ${plural(yearDays, "day", "days")} · latest ${formatDate(yearEvents[0].date)}`
-                    : "No changes in the last 365 days"}
-                </p>
-              </div>
-              <span className="flex items-center gap-4 text-[12px] text-content-main">
-                {(["low", "medium", "high"] as Severity[]).map((s) => (
-                  <span key={s} className="flex items-center gap-1.5">
-                    <span className="size-3 rounded-[2px]" style={{ background: CELL[s] }} aria-hidden />
-                    {SEVERITY_LABEL[s]}
-                  </span>
-                ))}
-              </span>
-            </div>
-            <Heatmap
-              weeks={53}
-              size={18}
-              gap={4}
-              ariaLabel={`Changes detected for ${m.name} over the last year, coloured by severity. Select a day to filter the change log.`}
-              selected={day}
-              onSelect={selectDay}
-              cell={(d) => {
-                const c = byDay.get(d);
-                return {
-                  fill: CELL[c?.sev ?? "none"],
-                  label: c ? `${c.n} change${c.n > 1 ? "s" : ""} · ${SEVERITY_LABEL[c.sev]} · ${formatDate(d)}` : `No changes · ${formatDate(d)}`,
-                  active: !!c,
-                  dim: !day && range !== "all" && !inRange(d),
-                };
-              }}
-            />
-            <p className="mt-1 text-[12px] text-content-tertiary">Select a day to see its changes in the log.</p>
-          </section>
-
-          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <section id="change-log" aria-labelledby="log-h" className="min-w-0 scroll-mt-24 self-start overflow-hidden rounded-[6px] border border-border-subtle bg-white">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-5 py-3">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <h2 id="log-h" className="text-[16px] font-semibold">
-                    Change log <span className="font-normal text-content-tertiary tnum">({nf.format(log.length)})</span>
-                  </h2>
-                  {day ? (
-                    <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border-accent bg-interactive-accent pr-1 pl-3 text-[12px] font-semibold text-interactive-control">
-                      {formatDateLong(day)}
-                      <button aria-label="Show the date filter again" onClick={() => setDay(null)} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
-                        <X className="size-3.5" />
-                      </button>
-                    </span>
-                  ) : (
-                    <label className="relative">
-                      <span className="sr-only">Date detected</span>
-                      <select
-                        value={range}
-                        onChange={(e) => setRange(e.target.value as LogRange)}
-                        className="h-8 appearance-none rounded-[4px] border border-interactive-secondary bg-white pr-8 pl-2.5 text-[13px] text-content-primary hover:border-content-main focus:border-interactive-primary max-sm:h-11 max-sm:text-[16px]"
-                      >
-                        {RANGES.map((r) => (
-                          <option key={r.value} value={r.value}>
-                            {r.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-content-main" aria-hidden />
-                    </label>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 max-sm:w-full">
-                  {reportState === "ready" && <span className="text-[12px] text-interactive-primary">Ready · generated {formatDate(iso(TODAY))}</span>}
-                  {freshReport}
-                </div>
-              </div>
-              {log.length === 0 ? (
-                <div className="px-5 py-12 text-center">
-                  <p className="text-[14px] font-semibold">No changes in this period</p>
-                  <p className="mt-1 text-[13px] text-content-main">
-                    Nothing was detected {range === "all" ? "yet" : `in ${rangeLabel.toLowerCase()} (${rangeSpan})`}.{" "}
-                    {range !== "all" && (
-                      <button onClick={() => setRange("all")} className="font-semibold text-content-link hover:underline">
-                        Show all time
-                      </button>
-                    )}
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <ul className="divide-y divide-border-subtle md:hidden">
-                    {log.slice(page * LOG_PAGE, (page + 1) * LOG_PAGE).map((e) => (
-                      <li key={e.id} className="px-5 py-3.5">
-                        <span className="text-[13px] text-content-main tnum">Detected {formatDate(e.date)}</span>
-                        <div className="mt-2">
-                          <LogChange categories={e.categories} was={e.detectedSeverity} />
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="overflow-x-auto max-md:hidden">
-                    <table className="w-full min-w-[520px] text-left text-[13px]">
-                      <thead className="border-b border-border-subtle text-[12px] text-content-main">
-                        <tr>
-                          <th className="w-[140px] px-5 py-2.5 font-semibold">Detected</th>
-                          <th className="px-3 pr-5 py-2.5 font-semibold">Change by severity</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border-subtle">
-                        {log.slice(page * LOG_PAGE, (page + 1) * LOG_PAGE).map((e) => (
-                          <tr key={e.id} className={cx(day === e.date && "bg-interactive-selected")}>
-                            <td className="px-5 py-3 whitespace-nowrap tnum">{formatDate(e.date)}</td>
-                            <td className="px-3 pr-5 py-3">
-                              <LogChange categories={e.categories} was={e.detectedSeverity} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-              {pages > 1 && (
-                <div className="flex items-center justify-end gap-3 border-t border-border-subtle px-5 py-3 text-[13px] text-content-main">
-                  <span className="tnum">
-                    Page {page + 1} of {pages}
-                  </span>
-                  <button aria-label="Previous page" disabled={page === 0} onClick={() => setPage(page - 1)} className="grid size-8 place-items-center rounded-[4px] border border-border-subtle hover:bg-background-subtle disabled:opacity-40">
-                    <ChevronLeft className="size-4" />
-                  </button>
-                  <button aria-label="Next page" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} className="grid size-8 place-items-center rounded-[4px] border border-border-subtle hover:bg-background-subtle disabled:opacity-40">
-                    <ChevronRight className="size-4" />
-                  </button>
-                </div>
-              )}
-            </section>
-
-            <aside className="lg:sticky lg:top-[80px] lg:self-start">
-              <section aria-labelledby="mix-h" aria-live="polite" className="rounded-[6px] border border-border-subtle bg-white p-5">
-                <h2 id="mix-h" className="text-[16px] font-semibold">
-                  {rangeLabel}
+      {/* Two columns, as in the report viewer: the monitor's facts in the rail, its activity and change log beside them. */}
+      <div className="mt-5 grid rounded-[8px] border border-border-subtle bg-background-elevated lg:grid-cols-[288px_minmax(0,1fr)]">
+        <aside aria-labelledby="details-h" className="border-border-subtle max-lg:border-b lg:border-r">
+          <div className="flex flex-col gap-6 p-5 lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-76px)] lg:overflow-y-auto">
+            <PkybDetails m={m} facts={facts} baselineReady={baselineReady} onDownloadBaseline={downloadBaseline} />
+            {m.events.length > 0 && (
+              <section aria-labelledby="mix-h" aria-live="polite" className="border-t border-border-subtle pt-5">
+                <h2 id="mix-h" className="text-[14px] font-semibold text-content-primary">
+                  {day ? formatDateLong(day) : rangeLabel}
                 </h2>
                 <p className="text-[12px] text-content-tertiary tnum">
-                  {rangeSpan} · {plural(ranged.length, "change", "changes")}
+                  {day ? plural(log.length, "change", "changes") : `${rangeSpan} · ${plural(ranged.length, "change", "changes")}`}
                 </p>
-                <ul className="mt-4 flex flex-col gap-2.5">
+                <ul className="mt-3 flex flex-col gap-2.5">
                   {(["high", "medium", "low"] as Severity[]).map((s) => {
-                    const total = ranged.length || 1;
+                    const total = mixTotal || 1;
                     return (
-                      <li key={s} className="grid grid-cols-[72px_minmax(0,1fr)_28px] items-center gap-3 text-[13px]">
+                      <li key={s} className="grid grid-cols-[64px_minmax(0,1fr)_28px] items-center gap-3 text-[13px]">
                         <span className={cx("font-medium", SEV_STYLE[s].text)}>{SEVERITY_LABEL[s]}</span>
                         <span className="h-2 overflow-hidden rounded-full bg-background-subtle">
                           <span className="block h-full rounded-full transition-[width] duration-300 ease-out-expo" style={{ width: `${(counts[s] / total) * 100}%`, background: CELL[s] }} />
@@ -393,14 +254,180 @@ export function MonitorDetail() {
                     );
                   })}
                 </ul>
-                <Link to="/pkyb/settings" className="mt-3 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
+                <button onClick={() => openSettings("severity")} className="mt-3 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
                   <SlidersHorizontal className="size-3.5" /> Adjust severity mapping
-                </Link>
+                </button>
               </section>
-            </aside>
+            )}
           </div>
-        </>
-      )}
+        </aside>
+
+        <div className="flex min-w-0 flex-col gap-8 px-4 py-5 lg:px-6">
+          {m.events.length === 0 ? (
+            active ? (
+              <section aria-labelledby="idle-h" className="rounded-[6px] border border-border-accent bg-interactive-accent/60 p-5 lg:p-6">
+                <div className="flex items-center gap-2 text-interactive-control">
+                  {baselineReady ? <Radar className="size-5" aria-hidden /> : <LoaderCircle className="size-5 animate-spin" aria-hidden />}
+                  <h2 id="idle-h" className="text-[18px] font-semibold">
+                    {baselineReady ? "Monitoring is running" : "Setting up your baseline"}
+                  </h2>
+                </div>
+                <p className="mt-2 max-w-[64ch] text-[14px] text-content-main">
+                  {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."} Checks run automatically, and you'll be alerted in-app and by email
+                  based on your{" "}
+                  <button onClick={() => openSettings("severity")} className="font-semibold text-content-link hover:underline">
+                    severity settings
+                  </button>
+                  . New changes will be listed here.
+                </p>
+              </section>
+            ) : (
+              <p className="py-10 text-center text-[13px] text-content-main">No changes were recorded for this company.</p>
+            )
+          ) : (
+            <>
+              {/* The year at a glance leads the content column: when things changed, and how badly, before any row of the log. */}
+              <section aria-labelledby="heat-h">
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                  <div>
+                    <h2 id="heat-h" className="text-[18px] leading-snug font-semibold">
+                      Activity, last 365 days
+                    </h2>
+                    <p className="mt-0.5 text-[13px] text-content-main tnum">{yearSummary}</p>
+                  </div>
+                  <span className="flex items-center gap-4 text-[12px] text-content-main">
+                    {(["low", "medium", "high"] as Severity[]).map((s) => (
+                      <span key={s} className="flex items-center gap-1.5">
+                        <span className="size-3 rounded-[2px]" style={{ background: CELL[s] }} aria-hidden />
+                        {SEVERITY_LABEL[s]}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+                <div className="rounded-[6px] border border-border-subtle bg-white px-3 pt-3 pb-2 sm:px-4">
+                  <Heatmap
+                    weeks={53}
+                    size={12}
+                    gap={3}
+                    ariaLabel={`Changes detected for ${m.name} over the last year, coloured by severity. Select a day to filter the change log.`}
+                    selected={day}
+                    onSelect={selectDay}
+                    cell={(d) => {
+                      const c = byDay.get(d);
+                      return {
+                        fill: CELL[c?.sev ?? "none"],
+                        label: c ? `${c.n} change${c.n > 1 ? "s" : ""} · ${SEVERITY_LABEL[c.sev]} · ${formatDate(d)}` : `No changes · ${formatDate(d)}`,
+                        active: !!c,
+                        dim: !day && range !== "all" && !inRange(d),
+                      };
+                    }}
+                  />
+                </div>
+                <p className="mt-1.5 text-[12px] text-content-tertiary">Select a day to see its changes in the log.</p>
+              </section>
+
+              <section id="change-log" aria-labelledby="log-h" className="min-w-0 scroll-mt-24">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <h2 id="log-h" className="text-[18px] leading-snug font-semibold">
+                      Change log <span className="font-normal text-content-tertiary tnum">({nf.format(log.length)})</span>
+                    </h2>
+                    {day ? (
+                      <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border-accent bg-interactive-accent pr-1 pl-3 text-[12px] font-semibold text-interactive-control">
+                        {formatDateLong(day)}
+                        <button aria-label="Show the date filter again" onClick={() => setDay(null)} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
+                          <X className="size-3.5" />
+                        </button>
+                      </span>
+                    ) : (
+                      <label className="relative">
+                        <span className="sr-only">Date detected</span>
+                        <select
+                          value={range}
+                          onChange={(e) => setRange(e.target.value as LogRange)}
+                          className="h-8 appearance-none rounded-[4px] border border-interactive-secondary bg-white pr-8 pl-2.5 text-[13px] text-content-primary hover:border-content-main focus:border-interactive-primary max-sm:h-11 max-sm:text-[16px]"
+                        >
+                          {RANGES.map((r) => (
+                            <option key={r.value} value={r.value}>
+                              {r.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-content-main" aria-hidden />
+                      </label>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 max-sm:w-full">
+                    {reportState === "ready" && <span className="text-[12px] text-interactive-primary">Ready · generated {formatDate(iso(TODAY))}</span>}
+                    {freshReport}
+                  </div>
+                </div>
+                <div className="overflow-hidden rounded-[6px] border border-border-subtle bg-white">
+                  {log.length === 0 ? (
+                    <div className="px-5 py-12 text-center">
+                      <p className="text-[14px] font-semibold">No changes in this period</p>
+                      <p className="mt-1 text-[13px] text-content-main">
+                        Nothing was detected {range === "all" ? "yet" : `in ${rangeLabel.toLowerCase()} (${rangeSpan})`}.{" "}
+                        {range !== "all" && (
+                          <button onClick={() => setRange("all")} className="font-semibold text-content-link hover:underline">
+                            Show all time
+                          </button>
+                        )}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <ul className="divide-y divide-border-subtle md:hidden">
+                        {log.slice(page * LOG_PAGE, (page + 1) * LOG_PAGE).map((e) => (
+                          <li key={e.id} className="px-4 py-3.5">
+                            <span className="text-[13px] text-content-main tnum">Detected {formatDate(e.date)}</span>
+                            <div className="mt-2">
+                              <LogChange categories={e.categories} was={e.detectedSeverity} />
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="overflow-x-auto max-md:hidden">
+                        <table className="w-full min-w-[520px] text-left text-[13px]">
+                          <thead className="border-b border-border-subtle bg-background-subtle text-[12px] text-content-primary">
+                            <tr>
+                              <th className="w-[140px] px-5 py-2.5 font-semibold">Detected</th>
+                              <th className="px-3 pr-5 py-2.5 font-semibold">Change by severity</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border-subtle">
+                            {log.slice(page * LOG_PAGE, (page + 1) * LOG_PAGE).map((e) => (
+                              <tr key={e.id} className={cx(day === e.date && "bg-interactive-selected")}>
+                                <td className="px-5 py-3 whitespace-nowrap tnum">{formatDate(e.date)}</td>
+                                <td className="px-3 pr-5 py-3">
+                                  <LogChange categories={e.categories} was={e.detectedSeverity} />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                  {pages > 1 && (
+                    <div className="flex items-center justify-end gap-3 border-t border-border-subtle px-5 py-3 text-[13px] text-content-main">
+                      <span className="tnum">
+                        Page {page + 1} of {pages}
+                      </span>
+                      <button aria-label="Previous page" disabled={page === 0} onClick={() => setPage(page - 1)} className="grid size-8 place-items-center rounded-[4px] border border-border-subtle hover:bg-background-subtle disabled:opacity-40">
+                        <ChevronLeft className="size-4" />
+                      </button>
+                      <button aria-label="Next page" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} className="grid size-8 place-items-center rounded-[4px] border border-border-subtle hover:bg-background-subtle disabled:opacity-40">
+                        <ChevronRight className="size-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </div>
 
       <StopDialog targets={stopping ? [{ id: m.id, name: m.name }] : []} onClose={() => setStopping(false)} />
       <CreateMonitorDialog company={creating} onClose={() => setCreating(null)} />
@@ -451,87 +478,50 @@ function LogChange({ categories, was }: { categories: Monitor["events"][number][
   );
 }
 
-/**
- * The status badge opens the monitor's own details: when it started, what it costs, and the baseline it compares against.
- * A light popover rather than a panel, so the page leads with activity and the facts are one click from the word "Active".
- */
-function MonitorDetails({ m, facts, baselineReady, onDownloadBaseline }: { m: Monitor; facts: Array<[string, ReactNode]>; baselineReady: boolean; onDownloadBaseline: () => void }) {
-  const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
-  const btn = useRef<HTMLButtonElement>(null);
-  const panelId = useId();
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: PointerEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setOpen(false);
-      btn.current?.focus();
-    };
-    document.addEventListener("pointerdown", away);
-    document.addEventListener("keydown", key);
-    return () => {
-      document.removeEventListener("pointerdown", away);
-      document.removeEventListener("keydown", key);
-    };
-  }, [open]);
-
+/** The rail's pKYB Details: status, what the monitor costs and how long it runs, and the baseline it compares against. */
+function PkybDetails({ m, facts, baselineReady, onDownloadBaseline }: { m: Monitor; facts: Array<[string, ReactNode]>; baselineReady: boolean; onDownloadBaseline: () => void }) {
   return (
-    <div ref={wrap} className="relative">
-      <button
-        ref={btn}
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((o) => !o)}
-        className="group -my-1 -ml-1 inline-flex min-h-8 items-center gap-2 rounded-[6px] py-1 pr-1.5 pl-1 hover:bg-background-subtle max-sm:min-h-11"
-      >
+    <section aria-labelledby="details-h">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="details-h" className="font-sans text-[13px] font-normal text-content-main uppercase">
+          pKYB Details
+        </h2>
         <StatusBadge status={m.status} />
-        <span className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-content-link group-hover:underline">
-          Monitor details
-          <ChevronDown className={cx("size-4 transition-transform duration-200 ease-out-expo", open && "rotate-180")} aria-hidden />
-        </span>
-      </button>
-      {open && (
-        <div
-          id={panelId}
-          role="region"
-          aria-label="Monitor details"
-          className="popover-in absolute top-full left-0 z-30 mt-2 w-[min(340px,calc(100vw-32px))] rounded-[6px] border border-border-subtle bg-white text-[13px] shadow-pop"
-        >
-          <dl className="divide-y divide-border-subtle">
-            {facts.map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-4 px-4 py-2.5">
-                <dt className="text-content-main">{k}</dt>
-                <dd className="text-right font-medium text-content-primary tnum">{v}</dd>
-              </div>
-            ))}
-          </dl>
-          {m.status !== "inactive" && (
-            <div className="border-t border-border-subtle bg-base-contrast px-4 py-3">
-              <p className="text-[12px] font-semibold text-content-main">Baseline report</p>
-              <div className="mt-1.5 flex items-center gap-3">
-                {baselineReady ? <FileCheck2 className="size-5 shrink-0 text-interactive-primary" aria-hidden /> : <LoaderCircle className="size-5 shrink-0 animate-spin text-content-tertiary" aria-hidden />}
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-content-primary">KYB Basic</p>
-                  <p className="text-[12px] text-content-tertiary tnum">{baselineReady ? `Generated ${formatDate(m.createdAt)}` : "Generating…"}</p>
-                </div>
-                {baselineReady && (
-                  <div className="-mr-2 flex items-center">
-                    <Link to={`/reports/${m.id}`} className="inline-flex h-8 items-center px-2 font-semibold text-content-link hover:underline">
-                      View
-                    </Link>
-                    <button onClick={onDownloadBaseline} className="inline-flex h-8 items-center px-2 font-semibold text-content-link hover:underline">
-                      Download
-                    </button>
-                  </div>
-                )}
-              </div>
+      </div>
+      <p className="mt-2 text-[12px] leading-snug text-content-tertiary">{STATUS_COPY[m.status].explain}</p>
+      <dl className="mt-4 divide-y divide-border-subtle border-y border-border-subtle text-[13px]">
+        {facts.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-4 py-2.5">
+            <dt className="text-content-main">{k}</dt>
+            <dd className="text-right font-medium text-content-primary tnum">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {m.status !== "inactive" && (
+        <div className="mt-4 rounded-[6px] border border-border-subtle bg-white p-3.5">
+          <p className="text-[12px] font-semibold text-content-main">Baseline report</p>
+          <div className="mt-2 flex items-start gap-3">
+            {baselineReady ? <FileCheck2 className="mt-0.5 size-5 shrink-0 text-interactive-primary" aria-hidden /> : <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-content-tertiary" aria-hidden />}
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-semibold text-content-primary">KYB Basic</p>
+              <p className="text-[12px] text-content-tertiary tnum">{baselineReady ? `Generated ${formatDate(m.createdAt)}` : "Generating…"}</p>
+            </div>
+          </div>
+          {baselineReady && (
+            <div className="mt-3 flex gap-2">
+              <Link
+                to={`/reports/${m.id}`}
+                className="inline-flex h-8 flex-1 items-center justify-center rounded-[4px] border border-interactive-primary bg-white text-[13px] font-semibold text-interactive-primary transition-colors hover:bg-interactive-accent max-sm:h-10"
+              >
+                View
+              </Link>
+              <Button size="sm" variant="ghost" onClick={onDownloadBaseline} className="flex-1 border border-border-subtle">
+                <Download className="size-4" aria-hidden /> Download
+              </Button>
             </div>
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 }

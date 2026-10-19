@@ -3,7 +3,6 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeftToLine,
   Bell,
-  ChevronDown,
   CircleArrowLeft,
   CodeXml,
   Gem,
@@ -23,6 +22,7 @@ import {
 import { useStore } from "../state/store";
 import { CATEGORY_LABEL, RECENT_DAYS, SEVERITY_LABEL, SEVERITY_RANK, isRecent, worstSeverity } from "../data/model";
 import { NewTag, SEV_STYLE, Toasts, cx, formatDate } from "./ui";
+import { SettingsHost, useOpenSettings } from "./SettingsPanel";
 
 /* The AsiaVerify wordmark: teal mark and "Asia", white "Verify", on a transparent ground for the charcoal sidebar.
    Collapsed, the frame narrows to the mark alone (the left 530 of 1972px). */
@@ -36,6 +36,7 @@ function Logo({ compact }: { compact?: boolean }) {
 
 function titleFor(path: string) {
   if (path.startsWith("/search")) return "Search for a business";
+  if (path === "/reports") return "View Reports";
   if (path.startsWith("/reports/")) return "View Report";
   if (path.startsWith("/report")) return "Choose a report";
   return "Perpetual KYB (pKYB)";
@@ -43,6 +44,7 @@ function titleFor(path: string) {
 
 function NotificationBell() {
   const { monitors, severity, prefs } = useStore();
+  const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const items = useMemo(() => {
@@ -94,9 +96,15 @@ function NotificationBell() {
           <div className="absolute top-12 right-0 z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-[6px] border border-border-subtle bg-white text-content-primary shadow-pop">
             <div className="flex items-baseline justify-between border-b border-border-subtle px-4 py-3">
               <p className="text-[14px] font-semibold">pKYB alerts</p>
-              <Link to="/pkyb/settings" onClick={() => setOpen(false)} className="text-[12px] text-content-link hover:underline">
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  openSettings("notifications");
+                }}
+                className="text-[12px] text-content-link hover:underline"
+              >
                 Alert settings
-              </Link>
+              </button>
             </div>
             <ul className="max-h-[360px] overflow-y-auto">
               {items.length === 0 && <li className="px-4 py-6 text-center text-[13px] text-content-main">No alerts in the last {RECENT_DAYS} days at the severities you chose in Alert settings.</li>}
@@ -154,7 +162,6 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
   const navigate = useNavigate();
   const loc = useLocation();
   const inPkyb = loc.pathname.startsWith("/pkyb");
-  const [pkybOpen, setPkybOpen] = useState(true);
 
   const row = (active: boolean) =>
     cx(
@@ -186,45 +193,16 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
       <div className="my-3 h-px bg-chrome-border" />
       <div className="flex flex-col gap-0.5">
         {NAV_TOP.map(item)}
-        <button
-          className={row(inPkyb && collapsed)}
-          aria-expanded={pkybOpen}
-          onClick={() => (collapsed ? navigate("/pkyb/monitoring") : setPkybOpen((o) => !o))}
-          title={collapsed ? "pKYB" : undefined}
-        >
+        {/* Perpetual KYB is one page now: the overview, with settings opening over it. Company pages stay under it. */}
+        <NavLink to="/pkyb/monitoring" onClick={onNavigate} className={() => row(inPkyb)} title={collapsed ? "Perpetual KYB" : undefined}>
           <Radar className={cx("size-5 shrink-0", inPkyb && "text-chrome-accent")} strokeWidth={1.75} />
           {!collapsed && (
             <>
-              <span className={cx(inPkyb && "font-semibold")}>pKYB</span>
+              <span className={cx("truncate", inPkyb && "font-semibold")}>Perpetual KYB</span>
               <NewTag dark />
-              <ChevronDown className={cx("ml-auto size-4 transition-transform", !pkybOpen && "-rotate-90")} />
             </>
           )}
-        </button>
-        {pkybOpen && !collapsed && (
-          <div className="ml-[22px] flex flex-col gap-0.5 border-l border-chrome-border py-0.5 pl-3">
-            {[
-              { to: "/pkyb/monitoring", label: "Monitoring" },
-              { to: "/pkyb/settings", label: "Severity Settings" },
-            ].map((s) => (
-              <NavLink
-                key={s.to}
-                to={s.to}
-                onClick={onNavigate}
-                className={({ isActive }) =>
-                  cx(
-                    "relative flex h-9 items-center rounded-[4px] px-3 text-[14px] transition-colors",
-                    isActive
-                      ? "bg-portal-sidebar-selected font-semibold text-white before:absolute before:top-2 before:bottom-2 before:-left-[13px] before:w-[2px] before:rounded-full before:bg-chrome-accent"
-                      : "text-chrome-content-main hover:bg-chrome-control-hover hover:text-white",
-                  )
-                }
-              >
-                {s.label}
-              </NavLink>
-            ))}
-          </div>
-        )}
+        </NavLink>
         {NAV_BOTTOM.map(item)}
       </div>
       <div className="mt-auto pt-6">
@@ -306,6 +284,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <Toasts />
+      <SettingsHost />
     </div>
   );
 }

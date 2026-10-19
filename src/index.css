@@ -250,3 +250,27 @@ dialog[open] {
     transform: translateY(-4px) scale(0.98);
   }
 }
+
+/* View Reports' custom range: one calendar icon on the field, so the native per-input indicator is hidden (clicking opens the picker). */
+.date-bare::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* Settings side panel (variant B): slides in from the right edge; at lg it sits beside the content, which makes room for it. */
+.side-panel-in {
+  animation: side-panel-in 280ms var(--ease-out-expo);
+}
+@keyframes side-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@media (min-width: 1024px) {
+  html[data-settings-panel] #main {
+    padding-right: 460px;
+  }
+  html[data-settings-panel] .toast-stack {
+    right: 476px;
+  }
+}

@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowUpRight, BadgeCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronsLeft, ChevronsRight, CircleHelp, Download, FilePlus2, Radar, ScanSearch, Share2, type LucideIcon } from "lucide-react";
-import { jurisdictionByCode, reportFacts, type Monitor, type ReportFacts } from "../data/model";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, ArrowUpRight, BadgeCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronsLeft, ChevronsRight, CircleHelp, Download, FilePlus2, Radar, ScanSearch, Share2, type LucideIcon } from "lucide-react";
+import { PKYB_UNSUPPORTED, REPORT_TYPE_LABEL, jurisdictionByCode, reportFacts, type Company, type Monitor, type ReportFacts, type ReportOrder } from "../data/model";
 import { useStore } from "../state/store";
 import { Button, Flag, cx, formatDate, nf } from "../components/ui";
+import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
+
+/** What a report is about, and when it was pulled. `m.id` seeds the demo registry record, so a report reads the same on every visit. */
+type Subject = Pick<Monitor, "id" | "name" | "localName" | "regNo" | "jurisdiction" | "createdAt">;
 
 type Section = { id: string; label: string; page: number; desc: string; children?: Array<{ id: string; label: string; desc: string }> };
 
@@ -36,25 +40,68 @@ const SECTIONS: Section[] = [
 const PAGES = 3;
 const pageOf = (id: string) => SECTIONS.find((s) => s.id === id || s.children?.some((c) => c.id === id))?.page ?? 1;
 
-/** The KYB Basic report a pKYB monitor was ordered with. It is the baseline every later change is compared against. */
+/**
+ * A completed report from View Reports, at `/reports/:orderId`. A pKYB monitor's id also resolves here, to the
+ * KYB Basic baseline the monitor was ordered with, so every "View baseline" link keeps working.
+ */
 export function ViewReport() {
   const { id } = useParams();
-  const { monitors } = useStore();
-  const m = monitors.find((x) => x.id === id);
-  if (!m || m.status === "inactive") {
+  const { monitors, reportOrders } = useStore();
+  const byOrder = reportOrders.find((o) => o.id === id);
+  const monitor = monitors.find((x) => x.id === (byOrder?.monitorId ?? id));
+  const order: ReportOrder | undefined =
+    byOrder ??
+    reportOrders.find((o) => o.monitorId === id) ??
+    (monitor && monitor.status !== "inactive"
+      ? {
+          id: monitor.id,
+          orderNo: "",
+          createdAt: monitor.createdAt,
+          companyName: monitor.name,
+          localName: monitor.localName,
+          regNo: monitor.regNo,
+          jurisdiction: monitor.jurisdiction,
+          user: "Me",
+          type: "basic",
+          status: "completed",
+          aml: false,
+          monitorId: monitor.id,
+        }
+      : undefined);
+
+  if (!order || order.status !== "completed") {
+    const baselineFailed = monitor?.status === "inactive";
+    const title = order?.status === "processing" ? "This report is still being prepared" : order?.status === "unfulfilled" ? "This report couldn't be fulfilled" : baselineFailed ? "This monitor has no baseline report" : "We couldn't find that report";
+    const body =
+      order?.status === "processing"
+        ? "We're retrieving the registry record. It opens from View Reports once it's completed."
+        : order?.status === "unfulfilled"
+          ? "The registry couldn't supply this report, so no credits were charged."
+          : baselineFailed
+            ? "Setup failed before the KYB Basic report was generated."
+            : "The link may be out of date. Find the report in View Reports.";
     return (
       <div className="mx-auto max-w-[640px] px-4 py-24 text-center">
-        <p className="text-[16px] font-semibold">{m ? "This monitor has no baseline report" : "We couldn't find that report"}</p>
-        <p className="mt-1 text-[14px] text-content-main">
-          {m ? "Setup failed before the KYB Basic report was generated." : "The link may be out of date. Open the company from Monitoring to find its report."}
-        </p>
-        <Link to={m ? `/pkyb/monitoring/${m.id}` : "/pkyb/monitoring"} className="mt-4 inline-block font-semibold text-content-link hover:underline">
-          {m ? "View pKYB" : "Go to Monitoring"}
+        <p className="text-[16px] font-semibold">{title}</p>
+        <p className="mt-1 text-[14px] text-content-main">{body}</p>
+        <Link to={baselineFailed ? `/pkyb/monitoring/${monitor!.id}` : "/reports"} className="mt-4 inline-block font-semibold text-content-link hover:underline">
+          {baselineFailed ? "View pKYB" : "Go to View Reports"}
         </Link>
       </div>
     );
   }
-  return <Report m={m} />;
+  const subject: Subject = {
+    // Baselines seed from the monitor, so the baseline reads the same from the monitor page and from View Reports.
+    id: order.monitorId ?? order.id,
+    name: order.companyName,
+    localName: order.localName,
+    regNo: order.regNo,
+    jurisdiction: order.jurisdiction,
+    createdAt: order.createdAt.slice(0, 10),
+  };
+  // The company's monitor: the one this report is the baseline of, or any running monitor on the same registration.
+  const linked = (order.monitorId && monitor) || monitors.find((x) => x.regNo === order.regNo && x.status === "active");
+  return <Report m={subject} order={order} monitor={linked || undefined} />;
 }
 
 // The report row's tabs, in the Portal's order. Each language of a report is its own tab.
@@ -63,7 +110,7 @@ const REPORT_TABS = [
   { lang: "og", label: "KYB Report [OG]" },
 ] as const;
 
-function Report({ m }: { m: Monitor }) {
+function Report({ m, order, monitor }: { m: Subject; order: ReportOrder; monitor?: Monitor }) {
   const { toast } = useStore();
   const facts = useMemo(() => reportFacts(m), [m]);
   const [page, setPage] = useState(1);
@@ -122,26 +169,64 @@ function Report({ m }: { m: Monitor }) {
   }, [page]);
 
   const name = showLocal ? m.localName! : m.name;
-  const monitoring = m.status === "active";
+  const monitoring = monitor?.status === "active";
+  const reportName = REPORT_TYPE_LABEL[order.type];
+  const [creating, setCreating] = useState<Company | null>(null);
+  const { createMonitor } = useStore();
+  const navigate = useNavigate();
+  const canCreate = !monitoring && !PKYB_UNSUPPORTED.has(m.jurisdiction);
+  const asCompany: Company = { id: m.id, name: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, status: "Registered" };
+  const startMonitor = () => {
+    const created = createMonitor(asCompany);
+    toast({ title: "Report generated and monitoring started", body: `This new KYB Basic report is the baseline for ${m.name}. Later changes are compared against it.` });
+    navigate(`/reports/${created.id}`);
+  };
   const notInPrototype = (what: string) => toast({ title: what, body: "Not part of this prototype." });
 
   return (
     <div className="px-4 pt-8 pb-16 sm:px-6 lg:px-8">
+      <Link to="/reports" className="-ml-1 mb-3 inline-flex h-8 items-center gap-1.5 rounded-[4px] px-1 text-[13px] font-semibold text-content-link hover:underline">
+        <ArrowLeft className="size-4" aria-hidden /> View Reports
+      </Link>
       {/* Portal2 report header: name line, registration line, then a hairline. */}
-      <header className="border-b border-portal-line pb-4">
-        <h1 className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-heading text-[18px] leading-tight font-bold text-content-primary">
-          <span>{m.name}</span>
-          {m.localName && (
-            <>
-              <span aria-hidden>|</span>
-              <span lang="zh">{m.localName}</span>
-            </>
-          )}
-          <Flag code={m.jurisdiction} className="ml-2 h-4 w-6 shrink-0" />
-        </h1>
-        <p className="mt-3 text-[14px] text-content-main uppercase">
-          Business Registration No. <span className="tnum">{m.regNo}</span>
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b border-portal-line pb-4">
+        <div className="min-w-0">
+          <h1 className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-heading text-[18px] leading-tight font-bold text-content-primary">
+            <span>{m.name}</span>
+            {m.localName && (
+              <>
+                <span aria-hidden>|</span>
+                <span lang="zh">{m.localName}</span>
+              </>
+            )}
+            <Flag code={m.jurisdiction} className="ml-2 h-4 w-6 shrink-0" />
+          </h1>
+          <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[14px] text-content-main uppercase">
+            <span>
+              Business Registration No. <span className="tnum">{m.regNo}</span>
+            </span>
+            <span aria-hidden className="text-border-neutral">
+              |
+            </span>
+            <span>{reportName}</span>
+            {order.orderNo && (
+              <>
+                <span aria-hidden className="text-border-neutral">
+                  |
+                </span>
+                <span>
+                  Order No. <span className="tnum">{order.orderNo}</span>
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+        {/* No running monitor on this company: offer one, confirmed in the order dialog (Version B) that prices the monitor and its KYB Basic baseline. */}
+        {canCreate && (
+          <Button variant="secondary" size="sm" onClick={() => setCreating(asCompany)}>
+            <Radar className="size-4" aria-hidden /> Create pKYB
+          </Button>
+        )}
       </header>
 
       {/* Report tabs, one per language, then the company's pKYB monitor (design-system styling, as it's new to pKYB). */}
@@ -169,19 +254,21 @@ function Report({ m }: { m: Monitor }) {
             );
           })}
         </div>
-        <span className="mx-1 h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />
-        <Link
-          to={`/pkyb/monitoring/${m.id}`}
-          className="group inline-flex h-8 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-2.5 pl-3 text-[13px] font-semibold text-interactive-control transition-colors hover:border-interactive-primary hover:bg-interactive-accent-hover"
-        >
-          <Radar className="size-4 text-interactive-primary" aria-hidden />
-          pKYB Monitoring
-          <span className="inline-flex items-center gap-1 border-l border-border-accent pl-2 text-[12px] font-medium text-interactive-primary">
-            <span className={cx("size-1.5 rounded-full", monitoring ? "bg-interactive-primary" : "bg-content-tertiary")} aria-hidden />
-            {monitoring ? "Active" : "Stopped"}
-          </span>
-          <ArrowUpRight className="size-3.5 text-interactive-primary transition-transform duration-150 group-hover:translate-x-px group-hover:-translate-y-px" aria-hidden />
-        </Link>
+        {monitor && <span className="mx-1 h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />}
+        {monitor && (
+          <Link
+            to={`/pkyb/monitoring/${monitor.id}`}
+            className="group inline-flex h-8 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-2.5 pl-3 text-[13px] font-semibold text-interactive-control transition-colors hover:border-interactive-primary hover:bg-interactive-accent-hover"
+          >
+            <Radar className="size-4 text-interactive-primary" aria-hidden />
+            pKYB Monitoring
+            <span className="inline-flex items-center gap-1 border-l border-border-accent pl-2 text-[12px] font-medium text-interactive-primary">
+              <span className={cx("size-1.5 rounded-full", monitoring ? "bg-interactive-primary" : "bg-content-tertiary")} aria-hidden />
+              {monitoring ? "Active" : "Inactive"}
+            </span>
+            <ArrowUpRight className="size-3.5 text-interactive-primary transition-transform duration-150 group-hover:translate-x-px group-hover:-translate-y-px" aria-hidden />
+          </Link>
+        )}
       </div>
 
       <div className="mt-5 rounded-[8px] border border-border-subtle bg-background-elevated">
@@ -199,7 +286,7 @@ function Report({ m }: { m: Monitor }) {
             icon={Download}
             title="Download Report"
             action="Download PDF report"
-            onClick={() => toast({ title: "Downloading KYB Basic report", body: `${m.name} · generated ${formatDate(facts.generated)}` })}
+            onClick={() => toast({ title: `Downloading ${reportName} report`, body: `${m.name} · generated ${formatDate(facts.generated)}` })}
           />
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <button
@@ -316,11 +403,11 @@ function Report({ m }: { m: Monitor }) {
           <div className="min-w-0 px-4 py-4 lg:px-6">
             {page === 1 && (
               <ReportSection id="cover" title="Cover Page">
-                <Cover m={m} facts={facts} name={name} showLocal={showLocal} />
+                <Cover m={m} facts={facts} name={name} showLocal={showLocal} reportName={reportName} />
               </ReportSection>
             )}
-            {page === 2 && <PageTwo m={m} facts={facts} />}
-            {page === 3 && <PageThree m={m} facts={facts} />}
+            {page === 2 && <PageTwo m={m} facts={facts} reportName={reportName} screened={order.aml || order.type === "complete"} />}
+            {page === 3 && <PageThree m={m} facts={facts} tracked={!!order.monitorId && monitoring} />}
 
             <div className="mt-10 flex items-center justify-between border-t border-border-subtle pt-3">
               <button
@@ -344,6 +431,7 @@ function Report({ m }: { m: Monitor }) {
           </div>
         </div>
       </div>
+      <CreateMonitorDialog company={creating} onClose={() => setCreating(null)} order={{ extras: [], onConfirm: startMonitor }} />
     </div>
   );
 }
@@ -464,7 +552,7 @@ function ReportSection({ id, title, children, level = 2, hidden }: { id: string;
 }
 
 /** The printed cover: a typographic sheet in the report's mint-to-sky wash, with the vertical REPORT band. */
-function Cover({ m, facts, name, showLocal }: { m: Monitor; facts: ReportFacts; name: string; showLocal: boolean }) {
+function Cover({ m, facts, name, showLocal, reportName }: { m: Subject; facts: ReportFacts; name: string; showLocal: boolean; reportName: string }) {
   return (
     <div className="@container relative mx-auto aspect-[1/1.32] w-full max-w-[780px] overflow-hidden border border-border-subtle bg-[linear-gradient(165deg,#eef6f1_0%,#e7eff3_58%,#eef6e9_100%)]">
       {/* Façade band: a window grid under the vertical REPORT lettering. Decorative. */}
@@ -491,7 +579,7 @@ function Cover({ m, facts, name, showLocal }: { m: Monitor; facts: ReportFacts; 
       </p>
 
       <div className="absolute right-[8%] bottom-[7%] left-[42%] text-right">
-        <p className="text-[max(12px,1.7cqw)] font-semibold tracking-[0.12em] text-interactive-control uppercase">KYB Basic Report</p>
+        <p className="text-[max(12px,1.7cqw)] font-semibold tracking-[0.12em] text-interactive-control uppercase">{reportName} Report</p>
         <p className="mt-[1.2cqw] text-[max(18px,4.2cqw)] leading-tight font-semibold tracking-[-0.015em] text-content-primary [text-wrap:balance]" lang={showLocal ? "zh" : undefined}>
           {name}
         </p>
@@ -551,7 +639,7 @@ function Rows<T>({ cols, rows, empty }: { cols: Array<{ label: string; cell: (r:
   );
 }
 
-function PageTwo({ m, facts }: { m: Monitor; facts: ReportFacts }) {
+function PageTwo({ m, facts, reportName, screened }: { m: Subject; facts: ReportFacts; reportName: string; screened: boolean }) {
   const j = jurisdictionByCode[m.jurisdiction];
   const years = Math.floor((new Date(facts.generated).getTime() - new Date(facts.incorporated).getTime()) / (365.25 * 86400000));
   const ubo = facts.shareholders.filter((s) => s.kind === "Individual" && s.pct >= 25);
@@ -567,7 +655,7 @@ function PageTwo({ m, facts }: { m: Monitor; facts: ReportFacts }) {
             ["Years since incorporation", `${nf.format(years)} years`],
             ["Legal alerts", "None found in registry sources"],
             ["Ultimate beneficial owners", ubo.length ? `${ubo.length} individual${ubo.length > 1 ? "s" : ""} with 25% or more` : "None identified at 25% or more"],
-            ["Sanctions, PEP and adverse media", "Not included in KYB Basic. Add the AML Report to screen."],
+            ["Sanctions, PEP and adverse media", screened ? "Screened. See the AML Report delivered with this order." : `Not included in ${reportName}. Add the AML Report to screen.`],
           ]}
         />
       </ReportSection>
@@ -600,7 +688,7 @@ function PageTwo({ m, facts }: { m: Monitor; facts: ReportFacts }) {
   );
 }
 
-function PageThree({ m, facts }: { m: Monitor; facts: ReportFacts }) {
+function PageThree({ m, facts, tracked }: { m: Subject; facts: ReportFacts; tracked: boolean }) {
   const j = jurisdictionByCode[m.jurisdiction];
   const ubo = facts.shareholders.filter((s) => s.kind === "Individual" && s.pct >= 25);
   const years = Math.floor((new Date(facts.generated).getTime() - new Date(facts.incorporated).getTime()) / (365.25 * 86400000));
@@ -668,7 +756,7 @@ function PageThree({ m, facts }: { m: Monitor; facts: ReportFacts }) {
             { label: "Date", cell: (h) => <span className="tnum">{formatDate(h.date)}</span> },
           ]}
         />
-        {m.status === "active" && (
+        {tracked && (
           <p className="mt-3 flex flex-wrap items-center gap-x-2 text-[13px] text-content-main">
             <Radar className="size-4 text-interactive-primary" aria-hidden />
             Changes after {formatDate(facts.generated)} are tracked by your pKYB monitor.

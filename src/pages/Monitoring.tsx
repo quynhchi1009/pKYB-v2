@@ -28,6 +28,7 @@ import { applyFilters, buildRow, filtersFromParams, type Filters, type Row } fro
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { Button, ChangeChips, Flag, Menu, SEV_STYLE, Select, cx, formatDate, nf } from "../components/ui";
+import { SettingsMenu, SettingsVariantSwitch } from "../components/SettingsPanel";
 
 type Tab = "active" | "feed" | "history";
 type Update = (patch: Record<string, string | null>) => void;
@@ -61,7 +62,6 @@ export function Monitoring() {
       { replace: true },
     );
   const setTab = (t: Tab) => update({ tab: t === "active" ? null : t });
-  const status = (params.get("status") as MonitorStatus | null) ?? "all";
 
   const active = useMemo(() => monitors.filter((m) => m.status === "active"), [monitors]);
 
@@ -123,14 +123,16 @@ export function Monitoring() {
     <div className="mx-auto max-w-[1360px] px-4 pt-6 pb-16 lg:px-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em]">Monitoring</h1>
+          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em]">Overview</h1>
           <p className="mt-1 text-[14px] text-content-main">Registry changes across the companies you monitor. Checks run automatically.</p>
         </div>
+        <SettingsMenu />
       </header>
+      <SettingsVariantSwitch />
 
       {/* Portfolio summary. The per-day heatmap lives on each company page; across hundreds of monitors it only adds noise. */}
-      <section aria-label="Portfolio summary" className="mt-6">
-        <div role="group" aria-label={`Filter active monitors. Severity counts are companies by their most severe change in the last ${RECENT_DAYS} days.`} className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
+      <section aria-label="Portfolio summary" className="@container mt-6">
+        <div role="group" aria-label={`Filter active monitors. Severity counts are companies by their most severe change in the last ${RECENT_DAYS} days.`} className="grid grid-cols-2 gap-3 @4xl:grid-cols-4 @4xl:gap-4">
           <StatCard
             value={active.length}
             label="Total monitored"
@@ -207,7 +209,7 @@ export function Monitoring() {
         {tab === "feed" && (
           <ChangeFeed rows={rows} params={params} update={update} />
         )}
-        {tab === "history" && <OrderHistory status={status} setStatus={(v) => update({ status: v })} />}
+        {tab === "history" && <OrderHistory status={params.get("status") ?? "all"} setStatus={(v) => update({ status: v })} />}
       </div>
       </div>
     </div>
@@ -713,21 +715,32 @@ function DateInput({ label, value, min, max, onChange }: { label: string; value:
 
 /* ---------------------------------------------------------------- Order history */
 
-function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; setStatus: (s: "all" | MonitorStatus) => void }) {
+/** Order history groups orders by whether they still watch the company: Active, or Inactive (stopped, or setup failed). */
+type HistoryStatus = "all" | "active" | "inactive";
+const HISTORY_FILTERS: Array<[HistoryStatus, string]> = [
+  ["all", "All orders"],
+  ["active", "Active"],
+  ["inactive", "Inactive"],
+];
+const historyGroup = (m: Monitor): Exclude<HistoryStatus, "all"> => (m.status === "active" ? "active" : "inactive");
+
+function OrderHistory({ status: raw, setStatus }: { status: string; setStatus: (s: HistoryStatus) => void }) {
+  // Old links may still say "stopped"; it is part of Inactive now.
+  const status: HistoryStatus = raw === "active" ? "active" : raw === "inactive" || raw === "stopped" ? "inactive" : "all";
   const { monitors } = useStore();
   const [jur, setJur] = useState("all");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const [creating, setCreating] = useState<Company | null>(null);
   const counts = useMemo(() => {
-    const c: Record<MonitorStatus, number> = { active: 0, stopped: 0, inactive: 0 };
-    monitors.forEach((m) => c[m.status]++);
+    const c: Record<Exclude<HistoryStatus, "all">, number> = { active: 0, inactive: 0 };
+    monitors.forEach((m) => c[historyGroup(m)]++);
     return c;
   }, [monitors]);
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return monitors
-      .filter((m) => (status === "all" || m.status === status) && (jur === "all" || m.jurisdiction === jur) && (!needle || m.name.toLowerCase().includes(needle) || m.regNo.includes(needle)))
+      .filter((m) => (status === "all" || historyGroup(m) === status) && (jur === "all" || m.jurisdiction === jur) && (!needle || m.name.toLowerCase().includes(needle) || m.regNo.includes(needle)))
       .sort((a, b) => ((a.endedAt ?? a.createdAt) < (b.endedAt ?? b.createdAt) ? 1 : -1));
   }, [monitors, status, jur, q]);
   useEffect(() => setPage(0), [status, jur, q]);
@@ -735,7 +748,7 @@ function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; se
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 pt-4" role="radiogroup" aria-label="Order status">
-        {(["all", "active", "stopped", "inactive"] as const).map((s) => (
+        {HISTORY_FILTERS.map(([s, label]) => (
           <button
             key={s}
             role="radio"
@@ -746,7 +759,7 @@ function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; se
               status === s ? "border-interactive-inverse bg-interactive-inverse font-semibold text-white" : "border-interactive-secondary bg-white text-content-main hover:border-content-main",
             )}
           >
-            {s === "all" ? "All orders" : STATUS_COPY[s].label}
+            {label}
             <span className="tnum opacity-70">{nf.format(s === "all" ? monitors.length : counts[s])}</span>
           </button>
         ))}
@@ -754,12 +767,11 @@ function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; se
       <FilterBar q={q} setQ={setQ} jur={jur} setJur={setJur} />
       <div className="overflow-hidden rounded-[6px] border border-border-subtle bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[940px] text-left text-[13px]">
+          <table className="w-full min-w-[820px] text-left text-[13px]">
             <thead className="border-b border-border-subtle text-[12px] text-content-main">
               <tr>
                 <th className="px-4 py-2.5 font-semibold">Company</th>
                 <th className="px-3 py-2.5 font-semibold">Jurisdiction</th>
-                <th className="px-3 py-2.5 font-semibold">Status</th>
                 <th className="px-3 py-2.5 font-semibold">Created</th>
                 <th className="px-3 py-2.5 font-semibold">Ended</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Changes recorded</th>
@@ -782,11 +794,25 @@ function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; se
                       <Flag code={m.jurisdiction} /> {jurisdictionByCode[m.jurisdiction].name}
                     </span>
                   </td>
-                  <td className="px-3 py-3">
-                    <StatusBadge status={m.status} />
+                  <td className="px-3 py-3 whitespace-nowrap text-content-main tnum">
+                    {m.status === "inactive" ? (
+                      <span title={`Ordered ${formatDate(m.createdAt)}. ${STATUS_COPY.inactive.explain}`} className="inline-flex items-center gap-1.5 text-content-main">
+                        <CircleAlert className="size-3.5 text-content-tertiary" aria-hidden />
+                        Creation failed
+                      </span>
+                    ) : (
+                      formatDate(m.createdAt)
+                    )}
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-content-main tnum">{formatDate(m.createdAt)}</td>
-                  <td className="px-3 py-3 whitespace-nowrap text-content-main tnum">{m.endedAt ? formatDate(m.endedAt) : <span className="text-content-tertiary">Runs until stopped</span>}</td>
+                  <td className="px-3 py-3 whitespace-nowrap text-content-main tnum">
+                    {m.status === "stopped" ? (
+                      formatDate(m.endedAt ?? m.lastChecked)
+                    ) : m.status === "active" ? (
+                      <span className="text-content-tertiary">Runs until stopped</span>
+                    ) : (
+                      <span className="sr-only">Never started</span>
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-right tnum">{m.events.length}</td>
                   <td className="px-4 py-1.5 text-right whitespace-nowrap">
                     {m.status !== "active" && (
@@ -799,7 +825,7 @@ function OrderHistory({ status, setStatus }: { status: "all" | MonitorStatus; se
               ))}
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center">
+                  <td colSpan={6} className="px-4 py-14 text-center">
                     <p className="text-[14px] font-semibold">No orders match</p>
                     <p className="mt-1 text-[13px] text-content-main">Try another status or jurisdiction, or clear the search.</p>
                   </td>

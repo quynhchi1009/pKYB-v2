@@ -119,9 +119,10 @@ export const STATUS_COPY: Record<MonitorStatus, { label: string; explain: string
     label: "Active",
     explain: "Checks run automatically. You are notified when the registry record changes.",
   },
+  // Stopped and setup-failed orders share one label: neither is watching the company. The explanation keeps them apart.
   stopped: {
-    label: "Stopped",
-    explain: "You stopped this monitor. Its change history stays here for your audit records.",
+    label: "Inactive",
+    explain: "You stopped this monitor, so checks no longer run. Its change history stays here for your audit records.",
   },
   inactive: {
     label: "Inactive",
@@ -418,3 +419,88 @@ export const SEARCH_COMPANIES: Company[] = [
   { id: "c-sz-sg", name: "Shenzhen Trading Pte. Ltd.", regNo: "201912345K", jurisdiction: "SG", status: "Live company" },
   { id: "c-sz-tw", name: "Shenzhen Precision Taiwan Co., Ltd.", localName: "深圳精密台灣股份有限公司", regNo: "53812947", jurisdiction: "TW", status: "Active" },
 ];
+
+/* ---------- Report orders (View Reports) ---------- */
+
+export const REPORT_TYPES = ["lite", "basic", "basic-ubo", "complete"] as const;
+export type ReportType = (typeof REPORT_TYPES)[number];
+export const REPORT_TYPE_LABEL: Record<ReportType, string> = {
+  lite: "KYB Lite",
+  basic: "KYB Basic",
+  "basic-ubo": "KYB Basic + Direct UBO",
+  complete: "KYB Complete",
+};
+
+/** Completed reports open in the viewer. Processing is still being built; Unfulfilled means the registry could not supply it. */
+export type ReportStatus = "completed" | "processing" | "unfulfilled";
+export const REPORT_STATUS_COPY: Record<ReportStatus, { label: string; explain: string }> = {
+  completed: { label: "Completed", explain: "The report is ready to view and download." },
+  processing: { label: "Processing", explain: "We're retrieving the registry record. The report opens here when it's ready." },
+  unfulfilled: { label: "Unfulfilled", explain: "The registry couldn't supply this report. No credits were charged." },
+};
+
+export type ReportOrder = {
+  id: string;
+  /** The Portal's order number: the order's timestamp (yyyyMMddHHmmss) plus a six-digit sequence. */
+  orderNo: string;
+  /** ISO date-time the order was placed. */
+  createdAt: string;
+  companyName: string;
+  localName?: string;
+  regNo: string;
+  jurisdiction: string;
+  user: string;
+  type: ReportType;
+  status: ReportStatus;
+  aml: boolean;
+  /** Set when this report is the baseline of a pKYB monitor. */
+  monitorId?: string;
+};
+
+const p2 = (n: number) => String(n).padStart(2, "0");
+export function orderNoFor(at: Date, seq: number) {
+  return `${at.getFullYear()}${p2(at.getMonth() + 1)}${p2(at.getDate())}${p2(at.getHours())}${p2(at.getMinutes())}${p2(at.getSeconds())}${String(seq).padStart(6, "0")}`;
+}
+/** ISO date-time in local time, so a placed order shows the clock time it was placed at. */
+export const isoLocal = (d: Date) => `${iso(new Date(d.getTime() - d.getTimezoneOffset() * 60000))}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+
+// Demo teammates on the same Portal account. Placeholder names, not client users.
+const TEAM = ["Me", "Me", "Me", "Wei Chen", "Priya Raman", "Grace Ho"];
+
+/** A demo order history: the baselines of the first walkthrough monitors, plus one-off reports on Search companies. */
+export function generateReportOrders(monitors: Monitor[]): ReportOrder[] {
+  const r = mulberry32(20261015);
+  const out: ReportOrder[] = [];
+  let seq = 1000;
+  const at = (dateIso: string, hour?: number) => {
+    const d = new Date(dateIso + "T00:00:00");
+    d.setHours(hour ?? 8 + Math.floor(r() * 12), Math.floor(r() * 60), Math.floor(r() * 60));
+    return d;
+  };
+  const push = (o: Omit<ReportOrder, "id" | "orderNo" | "createdAt">, when: Date) => {
+    const orderNo = orderNoFor(when, seq++);
+    out.push({ ...o, id: orderNo, orderNo, createdAt: isoLocal(when) });
+  };
+
+  // Every walkthrough monitor's KYB Basic baseline, on the day its monitor started.
+  for (const m of monitors.slice(0, 12)) {
+    if (m.status === "inactive") continue;
+    push(
+      { companyName: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, user: pickFrom(r, TEAM), type: "basic", status: "completed", aml: false, monitorId: m.id },
+      at(m.createdAt),
+    );
+  }
+
+  // One-off reports over the last eight weeks.
+  for (let i = 0; i < 46; i++) {
+    const c = pickFrom(r, SEARCH_COMPANIES);
+    const daysAgo = 1 + Math.floor(Math.pow(r(), 1.4) * 55);
+    const type = pickFrom(r, ["lite", "lite", "basic", "basic", "basic-ubo", "complete", "complete"] as const);
+    const status: ReportStatus = r() < 0.12 ? "unfulfilled" : "completed";
+    push(
+      { companyName: c.name, localName: c.localName, regNo: c.regNo, jurisdiction: c.jurisdiction, user: pickFrom(r, TEAM), type, status, aml: type === "basic" && r() < 0.3 },
+      at(iso(addDays(TODAY, -daysAgo))),
+    );
+  }
+  return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}

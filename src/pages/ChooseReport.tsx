@@ -1,7 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowRight, BadgeCheck, ChevronDown, CircleHelp, FileText, FileUser, Radar, TextSearch, type LucideIcon } from "lucide-react";
-import { PKYB_UNSUPPORTED, PRICING, SEARCH_COMPANIES, TODAY, iso, jurisdictionByCode, type Company } from "../data/model";
+import { PKYB_UNSUPPORTED, PRICING, SEARCH_COMPANIES, TODAY, iso, jurisdictionByCode, type Company, type ReportType } from "../data/model";
 import { useStore } from "../state/store";
 import { Button, Flag, NewTag, cx, formatDate } from "../components/ui";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
@@ -76,7 +76,7 @@ export function ChooseReport() {
 
 function ReportPage({ company }: { company: Company }) {
   const j = jurisdictionByCode[company.jurisdiction];
-  const { monitors, createMonitor, toast } = useStore();
+  const { monitors, createMonitor, orderReport, toast } = useStore();
   const navigate = useNavigate();
   const monitor = monitors.find((m) => m.regNo === company.regNo && m.status === "active");
   const [product, setProduct] = useState("kyb");
@@ -127,7 +127,12 @@ function ReportPage({ company }: { company: Company }) {
       navigate(`/reports/${m.id}`);
       return;
     }
-    toast({ title: `Generating ${selected.name} report`, body: `For ${company.name}. We'll notify you when it's ready.` });
+    orderReport(company, selected.id as ReportType, { aml });
+    toast({
+      title: `Generating ${selected.name} report`,
+      body: `For ${company.name}. It's in View Reports, and opens there when it's ready.`,
+      action: { label: "View Reports", onClick: () => navigate("/reports") },
+    });
   };
 
   // Portal2's Business Information block: the registry fields we hold for this company.

@@ -6,11 +6,11 @@ import { StoreProvider } from "./state/store";
 import { AppShell } from "./components/AppShell";
 import { Monitoring } from "./pages/Monitoring";
 import { MonitorDetail } from "./pages/MonitorDetail";
-import { SeveritySettings } from "./pages/SeveritySettings";
 import { ChooseReport } from "./pages/ChooseReport";
 import { SearchPage } from "./pages/SearchPage";
 import { Placeholder } from "./pages/Placeholder";
 import { ViewReport } from "./pages/ViewReport";
+import { ViewReports } from "./pages/ViewReports";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -22,9 +22,11 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/pkyb" element={<Navigate to="/pkyb/monitoring" replace />} />
             <Route path="/pkyb/monitoring" element={<Monitoring />} />
             <Route path="/pkyb/monitoring/:id" element={<MonitorDetail />} />
-            <Route path="/pkyb/settings" element={<SeveritySettings />} />
+            {/* Settings moved onto the overview; old links open them there. */}
+            <Route path="/pkyb/settings" element={<Navigate to="/pkyb/monitoring?settings=severity" replace />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/report/:id" element={<ChooseReport />} />
+            <Route path="/reports" element={<ViewReports />} />
             <Route path="/reports/:id" element={<ViewReport />} />
             <Route path="*" element={<Placeholder />} />
           </Routes>
