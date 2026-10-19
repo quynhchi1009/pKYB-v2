@@ -1,6 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowRight, BadgeCheck, ChevronDown, CircleHelp, FileText, FileUser, Radar, TextSearch, type LucideIcon } from "lucide-react";
+import { ArrowRight, BadgeCheck, ChevronDown, CircleHelp, FileText, FileUser, Eye, TextSearch, type LucideIcon } from "lucide-react";
 import { PKYB_UNSUPPORTED, PRICING, SEARCH_COMPANIES, TODAY, iso, jurisdictionByCode, type Company, type ReportType } from "../data/model";
 import { useStore } from "../state/store";
 import { Button, Flag, NewTag, cx, formatDate } from "../components/ui";
@@ -248,7 +248,7 @@ function ReportPage({ company }: { company: Company }) {
                                 <span className="font-heading text-[14px] leading-tight font-bold tracking-[0.02em] text-content-primary uppercase">{r.name}</span>
                                 {r.id === PKYB_REPORT && (
                                   <span className="inline-flex h-5 items-center gap-1 rounded-full border border-border-accent bg-white px-2 text-[11px] font-semibold text-interactive-control">
-                                    <Radar className="size-3" aria-hidden /> pKYB available
+                                    <Eye className="size-3" aria-hidden /> pKYB available
                                   </span>
                                 )}
                               </span>
@@ -501,10 +501,10 @@ function PkybOption({
     return (
       <div className="rounded-[6px] border border-border-accent bg-interactive-selected px-3 py-2.5">
         <p className="flex items-center gap-1.5 text-[13px] font-semibold text-interactive-control">
-          <Radar className="size-3.5 shrink-0" aria-hidden /> Already monitored
+          <Eye className="size-3.5 shrink-0" aria-hidden /> Already monitored
         </p>
         <p className="mt-0.5 text-[12px] text-content-main">Changes to this company appear in Monitoring.</p>
-        <Link to={`/pkyb/monitoring/${monitorId}`} className="mt-1 inline-flex min-h-7 items-center gap-1 text-[12px] font-semibold text-content-link hover:underline">
+        <Link to={`/reports/${monitorId}?tab=pkyb`} className="mt-1 inline-flex min-h-7 items-center gap-1 text-[12px] font-semibold text-content-link hover:underline">
           View monitoring <ArrowRight className="size-3.5" aria-hidden />
         </Link>
       </div>
@@ -515,7 +515,7 @@ function PkybOption({
     return (
       <div className="rounded-[6px] border border-border-subtle bg-background-subtle px-3 py-2.5">
         <p className="flex items-center gap-1.5 text-[13px] font-semibold text-content-main">
-          <Radar className="size-3.5 shrink-0" aria-hidden /> pKYB monitoring
+          <Eye className="size-3.5 shrink-0" aria-hidden /> pKYB monitoring
         </p>
         <p className="mt-0.5 text-[12px] text-content-main">Not available for {jurisdictionByCode[company.jurisdiction].name} companies yet.</p>
       </div>

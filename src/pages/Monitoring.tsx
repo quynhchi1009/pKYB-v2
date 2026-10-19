@@ -317,7 +317,7 @@ function ActiveTable({ rows, f: params, update, page }: { rows: Row[]; f: Filter
   const setSort = (v: "severity" | "date") => update({ sort: v === "severity" ? null : v });
 
   const filtered = useMemo(() => applyFilters(rows, f), [rows, q, jur, sev, cat, onlyRecent, sort]);
-  const open = (id: string) => navigate(`/pkyb/monitoring/${id}`);
+  const open = (id: string) => navigate(`/reports/${id}?tab=pkyb`, { state: { from: "monitoring" } });
   const pageRows = filtered.slice(page * PAGE, (page + 1) * PAGE);
   const selectedMix = useMemo(() => {
     const mix: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
@@ -386,7 +386,7 @@ function ActiveTable({ rows, f: params, update, page }: { rows: Row[]; f: Filter
                 <button role="checkbox" aria-checked={isSel} aria-label={`Select ${r.m.name}`} onClick={() => toggle(r.m.id)} className="-mx-3 -my-2.5 grid size-11 shrink-0 place-items-center text-content-tertiary">
                   {isSel ? <SquareCheck className="size-4 text-interactive-primary" aria-hidden /> : <Square className="size-4" aria-hidden />}
                 </button>
-                <Link to={`/pkyb/monitoring/${r.m.id}`} className="min-w-0 flex-1">
+                <Link to={`/reports/${r.m.id}?tab=pkyb`} state={{ from: "monitoring" }} className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className={cx("truncate text-[14px] text-content-primary", r.recent > 0 ? "font-semibold" : "font-medium")}>{r.m.name}</span>
                   </span>
@@ -481,7 +481,7 @@ function ActiveTable({ rows, f: params, update, page }: { rows: Row[]; f: Filter
                     <td className="px-3 py-3.5 whitespace-nowrap text-content-main tnum">{r.latest ? formatDate(r.latest.date) : "—"}</td>
                     <td className="py-2.5 pr-3" onClick={(e) => e.stopPropagation()}>
                       <span className="flex items-center justify-end gap-1">
-                        <Link to={`/pkyb/monitoring/${r.m.id}`} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
+                        <Link to={`/reports/${r.m.id}?tab=pkyb`} state={{ from: "monitoring" }} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
                           View
                         </Link>
                         <Menu
@@ -573,7 +573,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
     return out.sort((a, b) => (sort === "date" ? byDate(a, b) || bySev(a, b) : bySev(a, b) || byDate(a, b)));
   }, [rows, q, jur, sev, cat, range, from, to, sort, severity, alertsOnly, prefs]);
 
-  const open = (id: string) => navigate(`/pkyb/monitoring/${id}`);
+  const open = (id: string) => navigate(`/reports/${id}?tab=pkyb`, { state: { from: "monitoring" } });
   const slice = events.slice(page * PAGE, (page + 1) * PAGE);
   const filtersOn = q || jur !== "all" || sev !== "all" || cat !== "all" || range !== "all" || alertsOnly;
 
@@ -626,7 +626,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
             const j = jurisdictionByCode[m.jurisdiction];
             return (
               <li key={e.id} className="px-4 py-3.5">
-                <Link to={`/pkyb/monitoring/${m.id}`} className="block min-w-0">
+                <Link to={`/reports/${m.id}?tab=pkyb`} state={{ from: "monitoring" }} className="block min-w-0">
                   <span className="block truncate text-[14px] font-semibold text-content-primary">{m.name}</span>
                   <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-content-tertiary">
                     <Flag code={j.code} /> {j.name} · <span className="tnum">Detected {formatDate(e.date)}</span>
@@ -671,7 +671,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
                     </td>
                     <td className="px-3 py-3.5 whitespace-nowrap text-content-main tnum">{formatDate(e.date)}</td>
                     <td className="py-2.5 pr-4 text-right" onClick={(ev) => ev.stopPropagation()}>
-                      <Link to={`/pkyb/monitoring/${m.id}`} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
+                      <Link to={`/reports/${m.id}?tab=pkyb`} state={{ from: "monitoring" }} className="inline-flex h-8 items-center px-2 text-[13px] font-semibold text-content-link hover:underline">
                         View
                       </Link>
                     </td>
@@ -744,6 +744,8 @@ function OrderHistory({ status: raw, setStatus }: { status: string; setStatus: (
       .sort((a, b) => ((a.endedAt ?? a.createdAt) < (b.endedAt ?? b.createdAt) ? 1 : -1));
   }, [monitors, status, jur, q]);
   useEffect(() => setPage(0), [status, jur, q]);
+  // All orders mixes both groups, so each row says which it is. Under Active or Inactive the filter already does.
+  const showStatus = status === "all";
 
   return (
     <>
@@ -771,6 +773,7 @@ function OrderHistory({ status: raw, setStatus }: { status: string; setStatus: (
             <thead className="border-b border-border-subtle text-[12px] text-content-main">
               <tr>
                 <th className="px-4 py-2.5 font-semibold">Company</th>
+                {showStatus && <th className="px-3 py-2.5 font-semibold">Status</th>}
                 <th className="px-3 py-2.5 font-semibold">Jurisdiction</th>
                 <th className="px-3 py-2.5 font-semibold">Created</th>
                 <th className="px-3 py-2.5 font-semibold">Ended</th>
@@ -784,11 +787,16 @@ function OrderHistory({ status: raw, setStatus }: { status: string; setStatus: (
               {list.slice(page * PAGE, (page + 1) * PAGE).map((m) => (
                 <tr key={m.id} className="hover:bg-base-contrast">
                   <td className="px-4 py-3">
-                    <Link to={`/pkyb/monitoring/${m.id}`} className="block font-medium text-content-primary hover:text-content-link hover:underline">
+                    <Link to={`/reports/${m.id}?tab=pkyb`} state={{ from: "monitoring" }} className="block font-medium text-content-primary hover:text-content-link hover:underline">
                       {m.name}
                     </Link>
                     <span className="text-[12px] text-content-tertiary tnum">{m.regNo}</span>
                   </td>
+                  {showStatus && (
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <StatusBadge status={m.status} />
+                    </td>
+                  )}
                   <td className="px-3 py-3 whitespace-nowrap">
                     <span className="flex items-center gap-2 text-content-main">
                       <Flag code={m.jurisdiction} /> {jurisdictionByCode[m.jurisdiction].name}
@@ -825,7 +833,7 @@ function OrderHistory({ status: raw, setStatus }: { status: string; setStatus: (
               ))}
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-14 text-center">
+                  <td colSpan={showStatus ? 7 : 6} className="px-4 py-14 text-center">
                     <p className="text-[14px] font-semibold">No orders match</p>
                     <p className="mt-1 text-[13px] text-content-main">Try another status or jurisdiction, or clear the search.</p>
                   </td>

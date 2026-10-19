@@ -11,7 +11,7 @@ import {
   List,
   LogOut,
   Menu as MenuIcon,
-  Radar,
+  Eye,
   Search,
   Settings,
   ShoppingCart,
@@ -111,7 +111,8 @@ function NotificationBell() {
               {items.slice(0, 8).map((n) => (
                 <li key={n.id}>
                   <Link
-                    to={`/pkyb/monitoring/${n.monitorId}`}
+                    to={`/reports/${n.monitorId}?tab=pkyb`}
+                    state={{ from: "monitoring" }}
                     onClick={() => setOpen(false)}
                     className="flex gap-3 border-b border-border-subtle/70 px-4 py-3 hover:bg-base-contrast"
                   >
@@ -195,7 +196,7 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
         {NAV_TOP.map(item)}
         {/* Perpetual KYB is one page now: the overview, with settings opening over it. Company pages stay under it. */}
         <NavLink to="/pkyb/monitoring" onClick={onNavigate} className={() => row(inPkyb)} title={collapsed ? "Perpetual KYB" : undefined}>
-          <Radar className={cx("size-5 shrink-0", inPkyb && "text-chrome-accent")} strokeWidth={1.75} />
+          <Eye className={cx("size-5 shrink-0", inPkyb && "text-chrome-accent")} strokeWidth={1.75} />
           {!collapsed && (
             <>
               <span className={cx("truncate", inPkyb && "font-semibold")}>Perpetual KYB</span>

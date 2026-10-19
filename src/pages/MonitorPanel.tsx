@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, LoaderCircle, Radar, SlidersHorizontal, X } from "lucide-react";
-import { PRICING, STATUS_COPY, SEVERITY_LABEL, SEVERITY_RANK, TODAY, addDays, creditsLabel, iso, jurisdictionByCode, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
+import { Link, useSearchParams } from "react-router-dom";
+import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, LoaderCircle, Eye, SlidersHorizontal, X } from "lucide-react";
+import { PRICING, STATUS_COPY, SEVERITY_LABEL, SEVERITY_RANK, TODAY, addDays, creditsLabel, iso, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
 import { useStore } from "../state/store";
 import { Heatmap } from "../components/Heatmap";
 import { StopDialog } from "../components/StopDialog";
@@ -56,12 +56,15 @@ function rangeBounds(r: LogRange): { from?: string; to?: string } {
 const asCompany = (m: Monitor): Company => ({ id: m.id, name: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, status: "Registered" });
 const plural = (n: number, one: string, many: string) => `${nf.format(n)} ${n === 1 ? one : many}`;
 
-export function MonitorDetail() {
-  const { id } = useParams();
+/**
+ * A company's pKYB monitor, shown as the "pKYB Monitoring" tab of its report at `/reports/:id?tab=pkyb`: status,
+ * the baseline it compares against, the year's activity and the change log. `onViewBaseline` switches to the report
+ * tab when the report on screen is this monitor's baseline; otherwise the baseline opens as its own report.
+ */
+export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline?: () => void }) {
   const [params] = useSearchParams();
-  const { monitors, severity, toast, reports, requestReport } = useStore();
+  const { severity, toast, reports, requestReport } = useStore();
   const openSettings = useOpenSettings();
-  const m = monitors.find((x) => x.id === id);
   const [stopping, setStopping] = useState(false);
   const [creating, setCreating] = useState<Company | null>(null);
   const [confirmingReport, setConfirmingReport] = useState(false);
@@ -84,7 +87,7 @@ export function MonitorDetail() {
 
   const byDay = useMemo(() => {
     const out = new Map<string, { sev: Severity; n: number }>();
-    for (const e of m?.events ?? []) {
+    for (const e of m.events) {
       const s = worstSeverity(e.categories, severity);
       const cur = out.get(e.date);
       if (!cur) out.set(e.date, { sev: s, n: 1 });
@@ -93,18 +96,6 @@ export function MonitorDetail() {
     return out;
   }, [m, severity]);
 
-  if (!m) {
-    return (
-      <div className="mx-auto max-w-[720px] px-4 py-20 text-center">
-        <p className="text-[16px] font-semibold">This monitor doesn't exist</p>
-        <Link to="/pkyb/monitoring" className="mt-2 inline-block text-content-link hover:underline">
-          Back to Overview
-        </Link>
-      </div>
-    );
-  }
-
-  const j = jurisdictionByCode[m.jurisdiction];
   const active = m.status === "active";
   const yearEvents = m.events.filter((e) => e.date >= yearAgo);
   const yearDays = new Set(yearEvents.map((e) => e.date)).size;
@@ -168,43 +159,10 @@ export function MonitorDetail() {
     : "No changes in the last 365 days";
 
   return (
-    <div className="px-4 pt-6 pb-16 sm:px-6 lg:px-8">
-      <Link to="/pkyb/monitoring" className="-ml-1 mb-3 inline-flex h-8 items-center gap-1.5 rounded-[4px] px-1 text-[13px] font-semibold text-content-link hover:underline">
-        <ArrowLeft className="size-4" aria-hidden /> Overview
-      </Link>
-      {/* The report viewer's header: name line, registration line, then a hairline. Stop sits opposite, outlined, because it confirms first. */}
-      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b border-portal-line pb-4">
-        <div className="min-w-0">
-          <h1 className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-heading text-[18px] leading-tight font-bold text-content-primary [overflow-wrap:anywhere]">
-            <span>{m.name}</span>
-            {m.localName && (
-              <>
-                <span aria-hidden>|</span>
-                <span lang="zh">{m.localName}</span>
-              </>
-            )}
-            <Flag code={m.jurisdiction} className="ml-2 h-4 w-6 shrink-0" />
-          </h1>
-          <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[14px] text-content-main uppercase">
-            <span>
-              {j.regLabel} <span className="tnum">{m.regNo}</span>
-            </span>
-            <span aria-hidden className="text-border-neutral">
-              |
-            </span>
-            <span>{j.name}</span>
-          </p>
-        </div>
-        {active && (
-          <Button variant="danger-outline" size="sm" onClick={() => setStopping(true)}>
-            <CircleStop className="size-4" aria-hidden /> Stop monitoring
-          </Button>
-        )}
-      </header>
-
+    <div>
       {/* Stopped and Inactive say so first: no checks run, and the way forward is a new monitor. */}
       {!active && (
-        <section aria-labelledby="status-h" className="mt-5 rounded-[6px] border border-border-neutral bg-white p-5 lg:p-6">
+        <section aria-labelledby="status-h" className="mb-5 rounded-[6px] border border-border-neutral bg-white p-5 lg:p-6">
           <div className="flex items-center gap-2 text-content-primary">
             {m.status === "inactive" ? <CircleAlert className="size-5 text-content-main" aria-hidden /> : <CirclePause className="size-5 text-content-main" aria-hidden />}
             <h2 id="status-h" className="text-[18px] font-semibold">
@@ -220,7 +178,7 @@ export function MonitorDetail() {
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
             <Button variant={m.status === "inactive" ? "primary" : "secondary"} onClick={() => setCreating(asCompany(m))}>
-              <Radar className="size-4" /> Create pKYB monitor
+              <Eye className="size-4" /> Create pKYB monitor
             </Button>
             <span className="text-[12px] text-content-tertiary">Starts a new order with a new KYB Basic baseline.</span>
           </div>
@@ -228,10 +186,10 @@ export function MonitorDetail() {
       )}
 
       {/* Two columns, as in the report viewer: the monitor's facts in the rail, its activity and change log beside them. */}
-      <div className="mt-5 grid rounded-[8px] border border-border-subtle bg-background-elevated lg:grid-cols-[288px_minmax(0,1fr)]">
+      <div className="grid rounded-[8px] border border-border-subtle bg-background-elevated lg:grid-cols-[288px_minmax(0,1fr)]">
         <aside aria-labelledby="details-h" className="border-border-subtle max-lg:border-b lg:border-r">
           <div className="flex flex-col gap-6 p-5 lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-76px)] lg:overflow-y-auto">
-            <PkybDetails m={m} facts={facts} baselineReady={baselineReady} onDownloadBaseline={downloadBaseline} />
+            <PkybDetails m={m} facts={facts} baselineReady={baselineReady} onViewBaseline={onViewBaseline} onDownloadBaseline={downloadBaseline} onStop={() => setStopping(true)} />
             {m.events.length > 0 && (
               <section aria-labelledby="mix-h" aria-live="polite" className="border-t border-border-subtle pt-5">
                 <h2 id="mix-h" className="text-[14px] font-semibold text-content-primary">
@@ -267,7 +225,7 @@ export function MonitorDetail() {
             active ? (
               <section aria-labelledby="idle-h" className="rounded-[6px] border border-border-accent bg-interactive-accent/60 p-5 lg:p-6">
                 <div className="flex items-center gap-2 text-interactive-control">
-                  {baselineReady ? <Radar className="size-5" aria-hidden /> : <LoaderCircle className="size-5 animate-spin" aria-hidden />}
+                  {baselineReady ? <Eye className="size-5" aria-hidden /> : <LoaderCircle className="size-5 animate-spin" aria-hidden />}
                   <h2 id="idle-h" className="text-[18px] font-semibold">
                     {baselineReady ? "Monitoring is running" : "Setting up your baseline"}
                   </h2>
@@ -479,7 +437,23 @@ function LogChange({ categories, was }: { categories: Monitor["events"][number][
 }
 
 /** The rail's pKYB Details: status, what the monitor costs and how long it runs, and the baseline it compares against. */
-function PkybDetails({ m, facts, baselineReady, onDownloadBaseline }: { m: Monitor; facts: Array<[string, ReactNode]>; baselineReady: boolean; onDownloadBaseline: () => void }) {
+function PkybDetails({
+  m,
+  facts,
+  baselineReady,
+  onViewBaseline,
+  onDownloadBaseline,
+  onStop,
+}: {
+  m: Monitor;
+  facts: Array<[string, ReactNode]>;
+  baselineReady: boolean;
+  onViewBaseline?: () => void;
+  onDownloadBaseline: () => void;
+  onStop: () => void;
+}) {
+  const viewClass =
+    "inline-flex h-8 flex-1 items-center justify-center rounded-[4px] border border-interactive-primary bg-white text-[13px] font-semibold text-interactive-primary transition-colors hover:bg-interactive-accent max-sm:h-10";
   return (
     <section aria-labelledby="details-h">
       <div className="flex items-center justify-between gap-3">
@@ -509,18 +483,27 @@ function PkybDetails({ m, facts, baselineReady, onDownloadBaseline }: { m: Monit
           </div>
           {baselineReady && (
             <div className="mt-3 flex gap-2">
-              <Link
-                to={`/reports/${m.id}`}
-                className="inline-flex h-8 flex-1 items-center justify-center rounded-[4px] border border-interactive-primary bg-white text-[13px] font-semibold text-interactive-primary transition-colors hover:bg-interactive-accent max-sm:h-10"
-              >
-                View
-              </Link>
+              {onViewBaseline ? (
+                <button onClick={onViewBaseline} className={viewClass}>
+                  View
+                </button>
+              ) : (
+                <Link to={`/reports/${m.id}`} className={viewClass}>
+                  View
+                </Link>
+              )}
               <Button size="sm" variant="ghost" onClick={onDownloadBaseline} className="flex-1 border border-border-subtle">
                 <Download className="size-4" aria-hidden /> Download
               </Button>
             </div>
           )}
         </div>
+      )}
+      {/* Stop confirms first, so it can sit in the open; it stays outlined and below the facts it would end. */}
+      {m.status === "active" && (
+        <Button variant="danger-outline" size="sm" onClick={onStop} className="mt-4 w-full max-sm:h-10">
+          <CircleStop className="size-4" aria-hidden /> Stop monitoring
+        </Button>
       )}
     </section>
   );

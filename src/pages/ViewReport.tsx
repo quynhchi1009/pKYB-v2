@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, BadgeCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronsLeft, ChevronsRight, CircleHelp, Download, FilePlus2, Radar, ScanSearch, Share2, type LucideIcon } from "lucide-react";
-import { PKYB_UNSUPPORTED, REPORT_TYPE_LABEL, jurisdictionByCode, reportFacts, type Company, type Monitor, type ReportFacts, type ReportOrder } from "../data/model";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, BadgeCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronsLeft, ChevronsRight, CircleHelp, Download, Eye, FilePlus2, ScanSearch, Share2, type LucideIcon } from "lucide-react";
+import { PKYB_UNSUPPORTED, REPORT_TYPE_LABEL, STATUS_COPY, jurisdictionByCode, reportFacts, type Company, type Monitor, type ReportFacts, type ReportOrder } from "../data/model";
 import { useStore } from "../state/store";
 import { Button, Flag, cx, formatDate, nf } from "../components/ui";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
+import { MonitorPanel } from "./MonitorPanel";
 
 /** What a report is about, and when it was pulled. `m.id` seeds the demo registry record, so a report reads the same on every visit. */
 type Subject = Pick<Monitor, "id" | "name" | "localName" | "regNo" | "jurisdiction" | "createdAt">;
@@ -42,7 +43,8 @@ const pageOf = (id: string) => SECTIONS.find((s) => s.id === id || s.children?.s
 
 /**
  * A completed report from View Reports, at `/reports/:orderId`. A pKYB monitor's id also resolves here, to the
- * KYB Basic baseline the monitor was ordered with, so every "View baseline" link keeps working.
+ * KYB Basic baseline the monitor was ordered with, so every "View baseline" link keeps working. The company's monitor
+ * is the report's last tab (`?tab=pkyb`), so a monitor never has a page of its own.
  */
 export function ViewReport() {
   const { id } = useParams();
@@ -69,23 +71,25 @@ export function ViewReport() {
         }
       : undefined);
 
+  // Setup failed before the baseline was generated: there is no report to show, only the monitor's own tab.
+  if (!order && monitor?.status === "inactive") {
+    const subject: Subject = { id: monitor.id, name: monitor.name, localName: monitor.localName, regNo: monitor.regNo, jurisdiction: monitor.jurisdiction, createdAt: monitor.createdAt };
+    return <Report m={subject} monitor={monitor} />;
+  }
   if (!order || order.status !== "completed") {
-    const baselineFailed = monitor?.status === "inactive";
-    const title = order?.status === "processing" ? "This report is still being prepared" : order?.status === "unfulfilled" ? "This report couldn't be fulfilled" : baselineFailed ? "This monitor has no baseline report" : "We couldn't find that report";
+    const title = order?.status === "processing" ? "This report is still being prepared" : order?.status === "unfulfilled" ? "This report couldn't be fulfilled" : "We couldn't find that report";
     const body =
       order?.status === "processing"
         ? "We're retrieving the registry record. It opens from View Reports once it's completed."
         : order?.status === "unfulfilled"
           ? "The registry couldn't supply this report, so no credits were charged."
-          : baselineFailed
-            ? "Setup failed before the KYB Basic report was generated."
-            : "The link may be out of date. Find the report in View Reports.";
+          : "The link may be out of date. Find the report in View Reports.";
     return (
       <div className="mx-auto max-w-[640px] px-4 py-24 text-center">
         <p className="text-[16px] font-semibold">{title}</p>
         <p className="mt-1 text-[14px] text-content-main">{body}</p>
-        <Link to={baselineFailed ? `/pkyb/monitoring/${monitor!.id}` : "/reports"} className="mt-4 inline-block font-semibold text-content-link hover:underline">
-          {baselineFailed ? "View pKYB" : "Go to View Reports"}
+        <Link to="/reports" className="mt-4 inline-block font-semibold text-content-link hover:underline">
+          Go to View Reports
         </Link>
       </div>
     );
@@ -110,13 +114,31 @@ const REPORT_TABS = [
   { lang: "og", label: "KYB Report [OG]" },
 ] as const;
 
-function Report({ m, order, monitor }: { m: Subject; order: ReportOrder; monitor?: Monitor }) {
+type ViewTab = "en" | "og" | "pkyb";
+
+/** `order` is absent only for a monitor whose setup failed: the page then holds just the pKYB tab. */
+function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monitor?: Monitor }) {
   const { toast } = useStore();
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const fromMonitoring = (location.state as { from?: string } | null)?.from === "monitoring";
   const facts = useMemo(() => reportFacts(m), [m]);
   const [page, setPage] = useState(1);
   const [active, setActive] = useState("cover");
   const [companyOpen, setCompanyOpen] = useState(true);
   const [lang, setLang] = useState<"en" | "og">("en");
+  const onPkyb = !!monitor && (!order || params.get("tab") === "pkyb");
+  const tab: ViewTab = onPkyb ? "pkyb" : lang;
+  // Switching tabs rewrites the query in place: the tab is shareable, but Back still leaves the page.
+  const pickTab = (next: ViewTab) => {
+    const q = new URLSearchParams(params);
+    if (next === "pkyb") q.set("tab", "pkyb");
+    else {
+      q.delete("tab");
+      setLang(next);
+    }
+    setParams(q, { replace: true, state: location.state });
+  };
   const pending = useRef<string | null>(null);
   // A section picked from the rail stays highlighted until the reader scrolls on their own, even when the page
   // is too short to bring it to the top.
@@ -170,7 +192,7 @@ function Report({ m, order, monitor }: { m: Subject; order: ReportOrder; monitor
 
   const name = showLocal ? m.localName! : m.name;
   const monitoring = monitor?.status === "active";
-  const reportName = REPORT_TYPE_LABEL[order.type];
+  const reportName = REPORT_TYPE_LABEL[order?.type ?? "basic"];
   const [creating, setCreating] = useState<Company | null>(null);
   const { createMonitor } = useStore();
   const navigate = useNavigate();
@@ -181,12 +203,25 @@ function Report({ m, order, monitor }: { m: Subject; order: ReportOrder; monitor
     toast({ title: "Report generated and monitoring started", body: `This new KYB Basic report is the baseline for ${m.name}. Later changes are compared against it.` });
     navigate(`/reports/${created.id}`);
   };
+  // Arrow keys move along the tab strip, as in any tablist; Tab leaves it for the open panel.
+  const tabKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    const tabOrder: ViewTab[] = [...(order ? (["en", "og"] as ViewTab[]) : []), ...(monitor ? (["pkyb"] as ViewTab[]) : [])];
+    const i = tabOrder.indexOf(tab);
+    const next = e.key === "Home" ? 0 : e.key === "End" ? tabOrder.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + tabOrder.length) % tabOrder.length;
+    e.preventDefault();
+    pickTab(tabOrder[next]);
+    requestAnimationFrame(() => document.getElementById(`tab-${tabOrder[next]}`)?.focus());
+  };
   const notInPrototype = (what: string) => toast({ title: what, body: "Not part of this prototype." });
 
   return (
     <div className="px-4 pt-8 pb-16 sm:px-6 lg:px-8">
-      <Link to="/reports" className="-ml-1 mb-3 inline-flex h-8 items-center gap-1.5 rounded-[4px] px-1 text-[13px] font-semibold text-content-link hover:underline">
-        <ArrowLeft className="size-4" aria-hidden /> View Reports
+      <Link
+        to={fromMonitoring ? "/pkyb/monitoring" : "/reports"}
+        className="-ml-1 mb-3 inline-flex h-8 items-center gap-1.5 rounded-[4px] px-1 text-[13px] font-semibold text-content-link hover:underline"
+      >
+        <ArrowLeft className="size-4" aria-hidden /> {fromMonitoring ? "Overview" : "View Reports"}
       </Link>
       {/* Portal2 report header: name line, registration line, then a hairline. */}
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b border-portal-line pb-4">
@@ -208,8 +243,8 @@ function Report({ m, order, monitor }: { m: Subject; order: ReportOrder; monitor
             <span aria-hidden className="text-border-neutral">
               |
             </span>
-            <span>{reportName}</span>
-            {order.orderNo && (
+            <span>{order ? reportName : jurisdictionByCode[m.jurisdiction].name}</span>
+            {order?.orderNo && (
               <>
                 <span aria-hidden className="text-border-neutral">
                   |
@@ -224,213 +259,242 @@ function Report({ m, order, monitor }: { m: Subject; order: ReportOrder; monitor
         {/* No running monitor on this company: offer one, confirmed in the order dialog (Version B) that prices the monitor and its KYB Basic baseline. */}
         {canCreate && (
           <Button variant="secondary" size="sm" onClick={() => setCreating(asCompany)}>
-            <Radar className="size-4" aria-hidden /> Create pKYB
+            <Eye className="size-4" aria-hidden /> Create pKYB
           </Button>
         )}
       </header>
 
-      {/* Report tabs, one per language, then the company's pKYB monitor (design-system styling, as it's new to pKYB). */}
+      {/* One tab strip for the company: each language of the report, then its pKYB monitor. The monitor tab keeps
+          its radar and status so it reads as pKYB, but selects like the others. */}
       <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
         <span id="reports-h" className="mr-3 text-[14px] font-bold text-content-primary">
           View Report(s):
         </span>
-        <div role="group" aria-labelledby="reports-h" className="flex flex-wrap gap-3">
-          {REPORT_TABS.map((t) => {
-            const on = lang === t.lang;
-            return (
-              <button
-                key={t.lang}
-                aria-pressed={on}
-                onClick={() => setLang(t.lang)}
-                className={cx(
-                  "inline-flex h-8 items-center rounded-[4px] border px-4 text-[13px] font-semibold transition-colors max-sm:h-10",
-                  on
-                    ? "border-portal-pill-selected bg-portal-pill-selected text-white"
-                    : "border-border-subtle bg-portal-line text-content-main hover:border-border-neutral hover:text-content-primary",
-                )}
-              >
-                {t.label}
-              </button>
-            );
-          })}
+        <div role="tablist" aria-labelledby="reports-h" onKeyDown={tabKeys} className="flex flex-wrap items-center gap-3">
+          {order &&
+            REPORT_TABS.map((t) => {
+              const on = tab === t.lang;
+              return (
+                <button
+                  key={t.lang}
+                  role="tab"
+                  id={`tab-${t.lang}`}
+                  aria-selected={on}
+                  aria-controls="report-panel"
+                  tabIndex={on ? 0 : -1}
+                  onClick={() => pickTab(t.lang)}
+                  className={cx(
+                    "inline-flex h-8 items-center rounded-[4px] border px-4 text-[13px] font-semibold transition-colors max-sm:h-10",
+                    on
+                      ? "border-portal-pill-selected bg-portal-pill-selected text-white"
+                      : "border-border-subtle bg-portal-line text-content-main hover:border-border-neutral hover:text-content-primary",
+                  )}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          {order && monitor && <span className="h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />}
+          {monitor && (
+            <button
+              role="tab"
+              id="tab-pkyb"
+              aria-selected={onPkyb}
+              aria-controls="pkyb-panel"
+              tabIndex={onPkyb ? 0 : -1}
+              onClick={() => pickTab("pkyb")}
+              className={cx(
+                "inline-flex h-8 items-center gap-2 rounded-[4px] border pr-3 pl-3 text-[13px] font-semibold transition-colors max-sm:h-10",
+                onPkyb
+                  ? "border-portal-pill-selected bg-portal-pill-selected text-white"
+                  : "border-border-accent bg-interactive-accent text-interactive-control hover:border-interactive-primary hover:bg-interactive-accent-hover",
+              )}
+            >
+              <Eye className={cx("size-4", onPkyb ? "text-white" : "text-interactive-primary")} aria-hidden />
+              pKYB Monitoring
+              <span className={cx("inline-flex items-center gap-1.5 border-l pl-2 text-[12px] font-medium", onPkyb ? "border-white/30 text-white/85" : "border-border-accent text-interactive-primary")}>
+                <span
+                  className={cx(
+                    "size-1.5 rounded-full",
+                    monitoring ? (onPkyb ? "bg-chrome-accent" : "bg-interactive-primary") : onPkyb ? "bg-white/60" : "bg-content-tertiary",
+                  )}
+                  aria-hidden
+                />
+                {STATUS_COPY[monitor.status].label}
+              </span>
+            </button>
+          )}
         </div>
-        {monitor && <span className="mx-1 h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />}
-        {monitor && (
-          <Link
-            to={`/pkyb/monitoring/${monitor.id}`}
-            className="group inline-flex h-8 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-2.5 pl-3 text-[13px] font-semibold text-interactive-control transition-colors hover:border-interactive-primary hover:bg-interactive-accent-hover"
-          >
-            <Radar className="size-4 text-interactive-primary" aria-hidden />
-            pKYB Monitoring
-            <span className="inline-flex items-center gap-1 border-l border-border-accent pl-2 text-[12px] font-medium text-interactive-primary">
-              <span className={cx("size-1.5 rounded-full", monitoring ? "bg-interactive-primary" : "bg-content-tertiary")} aria-hidden />
-              {monitoring ? "Active" : "Inactive"}
-            </span>
-            <ArrowUpRight className="size-3.5 text-interactive-primary transition-transform duration-150 group-hover:translate-x-px group-hover:-translate-y-px" aria-hidden />
-          </Link>
-        )}
       </div>
 
-      <div className="mt-5 rounded-[8px] border border-border-subtle bg-background-elevated">
-        {/* Report actions and paging, as on the Portal's report viewer. */}
-        <div className="relative grid gap-5 border-b border-border-neutral py-5 pl-5 max-xl:pr-14 sm:grid-cols-2 sm:pl-8 xl:pr-8 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto] xl:items-end xl:gap-7">
-          <ToolAction icon={FilePlus2} title="Add UBO Report / Legal Documents" action="Select report type" onClick={() => notInPrototype("Add UBO Report / Legal Documents")} />
-          <ToolAction
-            icon={ScanSearch}
-            title="Add / Update AML Report"
-            help="Screen this company against sanctions, PEP and adverse media records."
-            action="Configure AML report"
-            onClick={() => notInPrototype("Add / Update AML Report")}
-          />
-          <ToolAction
-            icon={Download}
-            title="Download Report"
-            action="Download PDF report"
-            onClick={() => toast({ title: `Downloading ${reportName} report`, body: `${m.name} · generated ${formatDate(facts.generated)}` })}
-          />
-          <div className="flex flex-col items-start gap-3 sm:items-end">
-            <button
-              aria-label="Share report"
-              onClick={() => notInPrototype("Share report")}
-              className="grid size-9 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle max-xl:absolute max-xl:top-4 max-xl:right-4"
-            >
-              <Share2 className="size-6" strokeWidth={1.5} aria-hidden />
-            </button>
-            <nav aria-label="Report pages" className="flex items-center gap-3">
-              <span className="text-[14px] whitespace-nowrap text-content-primary tnum" aria-live="polite">
-                Page {page} of {PAGES}
-              </span>
-              <div className="flex gap-1.5">
-                <PageBtn label="First page" disabled={page === 1} onClick={() => goPage(1)}>
-                  <ChevronsLeft className="size-4" />
-                </PageBtn>
-                <PageBtn label="Previous page" disabled={page === 1} onClick={() => goPage(page - 1)}>
-                  <ChevronLeft className="size-4" />
-                </PageBtn>
-                <PageBtn label="Next page" disabled={page === PAGES} onClick={() => goPage(page + 1)}>
-                  <ChevronRight className="size-4" />
-                </PageBtn>
-                <PageBtn label="Last page" disabled={page === PAGES} onClick={() => goPage(PAGES)}>
-                  <ChevronsRight className="size-4" />
-                </PageBtn>
-              </div>
-            </nav>
-          </div>
+      {onPkyb && monitor && (
+        <div role="tabpanel" id="pkyb-panel" aria-labelledby="tab-pkyb" className="mt-5">
+          <MonitorPanel m={monitor} onViewBaseline={order?.monitorId === monitor.id ? () => pickTab("en") : undefined} />
         </div>
+      )}
 
-        <div className="grid lg:grid-cols-[288px_minmax(0,1fr)]">
-          {/* Jump to section */}
-          <aside className="border-border-subtle max-lg:border-b lg:border-r">
-            <div className="lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-76px)] lg:overflow-y-auto">
-              <div className="px-4 py-4 lg:hidden">
-                <label htmlFor="jump" className="mb-1 block text-[12px] font-medium text-content-main">
-                  Jump to section
-                </label>
-                <select
-                  id="jump"
-                  value={active}
-                  onChange={(e) => jump(e.target.value)}
-                  className="h-11 w-full rounded-[4px] border border-interactive-secondary bg-white px-2.5 text-[16px] text-content-primary"
-                >
-                  {SECTIONS.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <nav aria-labelledby="jump-h" className="py-5 pr-4 pl-2 max-lg:hidden">
-                <h2 id="jump-h" className="px-2 pb-3 font-sans text-[13px] font-normal text-content-main uppercase">
-                  Jump to section
-                </h2>
-                <ul className="flex flex-col gap-1">
-                  {SECTIONS.map((s) => {
-                    const self = active === s.id;
-                    const holdsActive = !!s.children?.some((c) => c.id === active);
-                    return (
-                      <li key={s.id}>
-                        <div className="relative flex items-center">
-                          <RailItem
-                            id={s.id}
-                            desc={s.desc}
-                            current={self || holdsActive}
-                            onClick={() => jump(s.children?.[0].id ?? s.id)}
-                            className={cx(
-                              s.children && "pr-10",
-                              self ? RAIL_ACTIVE : holdsActive ? "font-semibold text-content-link hover:bg-interactive-selected" : RAIL_IDLE,
-                            )}
-                          >
-                            {s.label}
-                          </RailItem>
-                          {s.children && (
-                            <button
-                              onClick={() => setCompanyOpen((o) => !o)}
-                              aria-expanded={companyOpen}
-                              aria-label={`${companyOpen ? "Hide" : "Show"} ${s.label} subsections`}
-                              className="absolute right-1 grid size-8 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle"
-                            >
-                              <ChevronUp className={cx("size-4 transition-transform", !companyOpen && "rotate-180")} />
-                            </button>
-                          )}
-                        </div>
-                        {s.children && companyOpen && (
-                          <ul className="mt-1 ml-2 flex flex-col gap-1 border-l border-border-subtle">
-                            {s.children.map((c) => (
-                              <li key={c.id}>
-                                <RailItem
-                                  id={c.id}
-                                  desc={c.desc}
-                                  current={active === c.id}
-                                  onClick={() => jump(c.id)}
-                                  className={cx("pl-5", active === c.id ? RAIL_ACTIVE : RAIL_IDLE)}
-                                >
-                                  {c.label}
-                                </RailItem>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+      {!onPkyb && order && (
+        <div role="tabpanel" id="report-panel" aria-labelledby={`tab-${lang}`} className="mt-5 rounded-[8px] border border-border-subtle bg-background-elevated">
+          {/* Report actions and paging, as on the Portal's report viewer. */}
+          <div className="relative grid gap-5 border-b border-border-neutral py-5 pl-5 max-xl:pr-14 sm:grid-cols-2 sm:pl-8 xl:pr-8 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto] xl:items-end xl:gap-7">
+            <ToolAction icon={FilePlus2} title="Add UBO Report / Legal Documents" action="Select report type" onClick={() => notInPrototype("Add UBO Report / Legal Documents")} />
+            <ToolAction
+              icon={ScanSearch}
+              title="Add / Update AML Report"
+              help="Screen this company against sanctions, PEP and adverse media records."
+              action="Configure AML report"
+              onClick={() => notInPrototype("Add / Update AML Report")}
+            />
+            <ToolAction
+              icon={Download}
+              title="Download Report"
+              action="Download PDF report"
+              onClick={() => toast({ title: `Downloading ${reportName} report`, body: `${m.name} · generated ${formatDate(facts.generated)}` })}
+            />
+            <div className="flex flex-col items-start gap-3 sm:items-end">
+              <button
+                aria-label="Share report"
+                onClick={() => notInPrototype("Share report")}
+                className="grid size-9 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle max-xl:absolute max-xl:top-4 max-xl:right-4"
+              >
+                <Share2 className="size-6" strokeWidth={1.5} aria-hidden />
+              </button>
+              <nav aria-label="Report pages" className="flex items-center gap-3">
+                <span className="text-[14px] whitespace-nowrap text-content-primary tnum" aria-live="polite">
+                  Page {page} of {PAGES}
+                </span>
+                <div className="flex gap-1.5">
+                  <PageBtn label="First page" disabled={page === 1} onClick={() => goPage(1)}>
+                    <ChevronsLeft className="size-4" />
+                  </PageBtn>
+                  <PageBtn label="Previous page" disabled={page === 1} onClick={() => goPage(page - 1)}>
+                    <ChevronLeft className="size-4" />
+                  </PageBtn>
+                  <PageBtn label="Next page" disabled={page === PAGES} onClick={() => goPage(page + 1)}>
+                    <ChevronRight className="size-4" />
+                  </PageBtn>
+                  <PageBtn label="Last page" disabled={page === PAGES} onClick={() => goPage(PAGES)}>
+                    <ChevronsRight className="size-4" />
+                  </PageBtn>
+                </div>
               </nav>
             </div>
-          </aside>
+          </div>
 
-          {/* Report pages */}
-          <div className="min-w-0 px-4 py-4 lg:px-6">
-            {page === 1 && (
-              <ReportSection id="cover" title="Cover Page">
-                <Cover m={m} facts={facts} name={name} showLocal={showLocal} reportName={reportName} />
-              </ReportSection>
-            )}
-            {page === 2 && <PageTwo m={m} facts={facts} reportName={reportName} screened={order.aml || order.type === "complete"} />}
-            {page === 3 && <PageThree m={m} facts={facts} tracked={!!order.monitorId && monitoring} />}
+          <div className="grid lg:grid-cols-[288px_minmax(0,1fr)]">
+            {/* Jump to section */}
+            <aside className="border-border-subtle max-lg:border-b lg:border-r">
+              <div className="lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-76px)] lg:overflow-y-auto">
+                <div className="px-4 py-4 lg:hidden">
+                  <label htmlFor="jump" className="mb-1 block text-[12px] font-medium text-content-main">
+                    Jump to section
+                  </label>
+                  <select
+                    id="jump"
+                    value={active}
+                    onChange={(e) => jump(e.target.value)}
+                    className="h-11 w-full rounded-[4px] border border-interactive-secondary bg-white px-2.5 text-[16px] text-content-primary"
+                  >
+                    {SECTIONS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-            <div className="mt-10 flex items-center justify-between border-t border-border-subtle pt-3">
-              <button
-                onClick={() => goPage(page - 1)}
-                disabled={page === 1}
-                className="inline-flex h-9 items-center gap-1.5 rounded-[4px] px-2 text-[13px] font-semibold whitespace-nowrap text-content-main hover:bg-background-subtle hover:text-content-primary disabled:invisible"
-              >
-                <ChevronLeft className="size-4" /> Previous page
-              </button>
-              <span className="text-[12px] whitespace-nowrap text-content-tertiary tnum max-sm:hidden">
-                Page {page} of {PAGES}
-              </span>
-              <button
-                onClick={() => goPage(page + 1)}
-                disabled={page === PAGES}
-                className="inline-flex h-9 items-center gap-1.5 rounded-[4px] px-2 text-[13px] font-semibold whitespace-nowrap text-interactive-primary hover:bg-interactive-accent disabled:invisible"
-              >
-                Next page <ChevronRight className="size-4" />
-              </button>
+                <nav aria-labelledby="jump-h" className="py-5 pr-4 pl-2 max-lg:hidden">
+                  <h2 id="jump-h" className="px-2 pb-3 font-sans text-[13px] font-normal text-content-main uppercase">
+                    Jump to section
+                  </h2>
+                  <ul className="flex flex-col gap-1">
+                    {SECTIONS.map((s) => {
+                      const self = active === s.id;
+                      const holdsActive = !!s.children?.some((c) => c.id === active);
+                      return (
+                        <li key={s.id}>
+                          <div className="relative flex items-center">
+                            <RailItem
+                              id={s.id}
+                              desc={s.desc}
+                              current={self || holdsActive}
+                              onClick={() => jump(s.children?.[0].id ?? s.id)}
+                              className={cx(
+                                s.children && "pr-10",
+                                self ? RAIL_ACTIVE : holdsActive ? "font-semibold text-content-link hover:bg-interactive-selected" : RAIL_IDLE,
+                              )}
+                            >
+                              {s.label}
+                            </RailItem>
+                            {s.children && (
+                              <button
+                                onClick={() => setCompanyOpen((o) => !o)}
+                                aria-expanded={companyOpen}
+                                aria-label={`${companyOpen ? "Hide" : "Show"} ${s.label} subsections`}
+                                className="absolute right-1 grid size-8 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle"
+                              >
+                                <ChevronUp className={cx("size-4 transition-transform", !companyOpen && "rotate-180")} />
+                              </button>
+                            )}
+                          </div>
+                          {s.children && companyOpen && (
+                            <ul className="mt-1 ml-2 flex flex-col gap-1 border-l border-border-subtle">
+                              {s.children.map((c) => (
+                                <li key={c.id}>
+                                  <RailItem
+                                    id={c.id}
+                                    desc={c.desc}
+                                    current={active === c.id}
+                                    onClick={() => jump(c.id)}
+                                    className={cx("pl-5", active === c.id ? RAIL_ACTIVE : RAIL_IDLE)}
+                                  >
+                                    {c.label}
+                                  </RailItem>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </nav>
+              </div>
+            </aside>
+
+            {/* Report pages */}
+            <div className="min-w-0 px-4 py-4 lg:px-6">
+              {page === 1 && (
+                <ReportSection id="cover" title="Cover Page">
+                  <Cover m={m} facts={facts} name={name} showLocal={showLocal} reportName={reportName} />
+                </ReportSection>
+              )}
+              {page === 2 && <PageTwo m={m} facts={facts} reportName={reportName} screened={order.aml || order.type === "complete"} />}
+              {page === 3 && <PageThree m={m} facts={facts} tracked={!!order.monitorId && monitoring} />}
+
+              <div className="mt-10 flex items-center justify-between border-t border-border-subtle pt-3">
+                <button
+                  onClick={() => goPage(page - 1)}
+                  disabled={page === 1}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-[4px] px-2 text-[13px] font-semibold whitespace-nowrap text-content-main hover:bg-background-subtle hover:text-content-primary disabled:invisible"
+                >
+                  <ChevronLeft className="size-4" /> Previous page
+                </button>
+                <span className="text-[12px] whitespace-nowrap text-content-tertiary tnum max-sm:hidden">
+                  Page {page} of {PAGES}
+                </span>
+                <button
+                  onClick={() => goPage(page + 1)}
+                  disabled={page === PAGES}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-[4px] px-2 text-[13px] font-semibold whitespace-nowrap text-interactive-primary hover:bg-interactive-accent disabled:invisible"
+                >
+                  Next page <ChevronRight className="size-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
       <CreateMonitorDialog company={creating} onClose={() => setCreating(null)} order={{ extras: [], onConfirm: startMonitor }} />
     </div>
   );
@@ -758,7 +822,7 @@ function PageThree({ m, facts, tracked }: { m: Subject; facts: ReportFacts; trac
         />
         {tracked && (
           <p className="mt-3 flex flex-wrap items-center gap-x-2 text-[13px] text-content-main">
-            <Radar className="size-4 text-interactive-primary" aria-hidden />
+            <Eye className="size-4 text-interactive-primary" aria-hidden />
             Changes after {formatDate(facts.generated)} are tracked by your pKYB monitor.
           </p>
         )}

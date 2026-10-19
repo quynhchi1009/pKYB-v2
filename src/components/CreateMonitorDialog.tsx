@@ -1,20 +1,19 @@
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowDown, ArrowRight, BellRing, CircleAlert, CircleCheck, FileCheck2, Radar, SlidersHorizontal, X } from "lucide-react";
-import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, PKYB_UNSUPPORTED, PRICING, TODAY, creditsLabel, iso, jurisdictionByCode, totalTodayLabel, type Company, type Severity } from "../data/model";
+import { ArrowDown, ArrowRight, BellRing, CircleAlert, CircleCheck, FileCheck2, Eye, X } from "lucide-react";
+import { CATEGORIES, CATEGORY_LABEL, PKYB_UNSUPPORTED, PRICING, TODAY, creditsLabel, iso, jurisdictionByCode, totalTodayLabel, type Company } from "../data/model";
 import { useStore } from "../state/store";
-import { useOpenSettings } from "./SettingsPanel";
 import { Button, CATEGORY_ICON, Dialog, Flag, cx, formatDate } from "./ui";
 
-const STEPS: Array<{ when: string; what: string; icon: typeof Radar }> = [
+const STEPS: Array<{ when: string; what: string; icon: typeof Eye }> = [
   { when: "Today", what: "KYB Basic baseline report attached", icon: FileCheck2 },
-  { when: "Ongoing", what: "Automatic checks until you stop", icon: Radar },
+  { when: "Ongoing", what: "Automatic checks until you stop", icon: Eye },
   { when: "On change", what: "Alerts based on your severity", icon: BellRing },
 ];
 
 /**
  * Create a pKYB monitor, laid out as an order slip: the navy panel says who is being watched and
- * what will happen; the white panel is the order itself (what's watched, who sets severity, the
+ * what will happen; the white panel is the order itself (what's watched, the
  * required baseline and the total), ending in the commit.
  */
 /**
@@ -25,11 +24,9 @@ const STEPS: Array<{ when: string; what: string; icon: typeof Radar }> = [
 export type PkybOrder = { extras: string[]; onConfirm: () => void };
 
 export function CreateMonitorDialog({ company, onClose, order }: { company: Company | null; onClose: () => void; order?: PkybOrder }) {
-  const { createMonitor, toast, monitors, severity } = useStore();
-  const openSettings = useOpenSettings();
+  const { createMonitor, toast, monitors } = useStore();
   const navigate = useNavigate();
   const loc = useLocation();
-  const customised = CATEGORIES.some((c) => severity[c] !== DEFAULT_SEVERITY[c]);
   const j = company ? jurisdictionByCode[company.jurisdiction] : null;
   const existing = company ? monitors.find((m) => m.regNo === company.regNo && m.status === "active") : undefined;
   const unsupported = !!company && PKYB_UNSUPPORTED.has(company.jurisdiction);
@@ -156,41 +153,8 @@ export function CreateMonitorDialog({ company, onClose, order }: { company: Comp
                         );
                       })}
                     </ul>
-                  </section>
-
-                  <section aria-labelledby="sev-h" className="border-t border-border-subtle pt-5">
-                    <h3 id="sev-h" className="flex items-center gap-2 text-[14px] font-semibold text-content-primary">
-                      <SlidersHorizontal className="size-4 text-interactive-primary" aria-hidden /> Severity
-                    </h3>
-                    {customised ? (
-                      <p className="mt-1 text-[13px] text-content-main">
-                        Your team's severity settings apply. Change them in{" "}
-                        <button
-                          onClick={() => {
-                            onClose();
-                            openSettings("severity");
-                          }}
-                          className="font-semibold text-content-link hover:underline"
-                        >
-                          Severity Settings
-                        </button>
-                        .
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-[13px] text-content-main">
-                        All start at <span className="font-semibold text-content-primary">Medium</span>. Change in{" "}
-                        <button
-                          onClick={() => {
-                            onClose();
-                            openSettings("severity");
-                          }}
-                          className="font-semibold text-content-link hover:underline"
-                        >
-                          Severity Settings
-                        </button>
-                        .
-                      </p>
-                    )}
+                    {/* Just enough to know severity exists; the mapping itself lives in Severity Settings. */}
+                    <p className="mt-3 text-[13px] text-content-tertiary italic">Severity can be applied to each of the change categories.</p>
                   </section>
 
                   <section aria-labelledby="order-h" className="border-t border-dashed border-border-neutral pt-5">
@@ -232,7 +196,7 @@ export function CreateMonitorDialog({ company, onClose, order }: { company: Comp
                   {order ? "Back" : "Cancel"}
                 </Button>
                 {existing ? (
-                  <Button variant="primary" data-autofocus="" onClick={() => go(`/pkyb/monitoring/${existing.id}`)}>
+                  <Button variant="primary" data-autofocus="" onClick={() => go(`/reports/${existing.id}?tab=pkyb`)}>
                     Open monitor <ArrowRight className="size-4" />
                   </Button>
                 ) : unsupported ? (

@@ -1,12 +1,12 @@
-import { BellRing, FileCheck2, Radar } from "lucide-react";
+import { BellRing, FileCheck2, Eye } from "lucide-react";
 import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, PRICING, type Company } from "../data/model";
 import { useStore } from "../state/store";
 import { useOpenSettings } from "./SettingsPanel";
 import { Button, CATEGORY_ICON, Dialog } from "./ui";
 
-const STEPS: Array<{ when: string; what: string; icon: typeof Radar }> = [
+const STEPS: Array<{ when: string; what: string; icon: typeof Eye }> = [
   { when: "Today", what: "This KYB Basic report becomes the baseline", icon: FileCheck2 },
-  { when: "Ongoing", what: "Automatic registry checks until you stop", icon: Radar },
+  { when: "Ongoing", what: "Automatic registry checks until you stop", icon: Eye },
   { when: "On change", what: "Alerts at the severity you set", icon: BellRing },
 ];
 

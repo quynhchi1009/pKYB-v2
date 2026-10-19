@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowDownNarrowWide, ArrowUpNarrowWide, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Download, LoaderCircle, Radar, Search } from "lucide-react";
+import { ArrowDownNarrowWide, ArrowUpNarrowWide, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Download, LoaderCircle, Eye, Search } from "lucide-react";
 import {
   JURISDICTIONS,
   PKYB_UNSUPPORTED,
@@ -416,8 +416,8 @@ function AddOns({ o, compact, pkyb, onCreatePkyb, onAddAml }: { o: ReportOrder; 
     <span className={cx("flex gap-x-3 gap-y-1", compact ? "flex-row flex-wrap" : "flex-col items-start")}>
       {o.aml && <span className="font-medium">AML</span>}
       {o.monitorId && (
-        <Link to={`/pkyb/monitoring/${o.monitorId}`} className="inline-flex items-center gap-1 font-semibold whitespace-nowrap text-content-link hover:underline">
-          <Radar className="size-3.5 text-interactive-primary" aria-hidden />
+        <Link to={`/reports/${o.id}?tab=pkyb`} className="inline-flex items-center gap-1 font-semibold whitespace-nowrap text-content-link hover:underline">
+          <Eye className="size-3.5 text-interactive-primary" aria-hidden />
           pKYB
         </Link>
       )}
