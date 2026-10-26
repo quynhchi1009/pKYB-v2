@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, LoaderCircle, Eye, SlidersHorizontal, X } from "lucide-react";
-import { PRICING, STATUS_COPY, SEVERITY_LABEL, SEVERITY_RANK, TODAY, addDays, creditsLabel, iso, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, FilePlus2, LoaderCircle, Eye, SlidersHorizontal, X } from "lucide-react";
+import { PRICING, STATUS_COPY, SEVERITY_LABEL, SEVERITY_RANK, TODAY, addDays, iso, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
 import { useStore } from "../state/store";
 import { Heatmap } from "../components/Heatmap";
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { useOpenSettings } from "../components/SettingsPanel";
 import { StatusBadge } from "./Monitoring";
-import { Button, ChangeChips, Dialog, Flag, SEV_STYLE, cx, formatDate, formatDateLong, nf } from "../components/ui";
+import { Button, ChangeChips, Flag, SEV_STYLE, cx, formatDate, formatDateLong, nf } from "../components/ui";
 
 const CELL: Record<Severity | "none", string> = {
   none: "var(--color-background-subtle)",
@@ -63,11 +63,11 @@ const plural = (n: number, one: string, many: string) => `${nf.format(n)} ${n ==
  */
 export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline?: () => void }) {
   const [params] = useSearchParams();
-  const { severity, toast, reports, requestReport } = useStore();
+  const navigate = useNavigate();
+  const { severity, toast, reportOrders } = useStore();
   const openSettings = useOpenSettings();
   const [stopping, setStopping] = useState(false);
   const [creating, setCreating] = useState<Company | null>(null);
-  const [confirmingReport, setConfirmingReport] = useState(false);
   const [range, setRange] = useState<LogRange>("all");
   const [day, setDay] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -117,24 +117,13 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
     }
   };
   const pages = Math.max(1, Math.ceil(log.length / LOG_PAGE));
-  const reportState = reports[m.id];
-  const price = creditsLabel(PRICING.kybBasicCredits);
-  const freshReport =
-    reportState === "generating" ? (
-      <Button variant="primary" size="sm" disabled aria-live="polite">
-        <LoaderCircle className="size-4 animate-spin" /> Generating fresh report…
-      </Button>
-    ) : reportState === "ready" ? (
-      <Button variant="primary" size="sm" onClick={() => toast({ title: "Downloading KYB Basic report", body: `${m.name}, generated ${formatDate(iso(TODAY))}.` })}>
-        <Download className="size-4" /> Download fresh report
-      </Button>
-    ) : (
-      <Button variant="primary" size="sm" onClick={() => setConfirmingReport(true)} className="max-sm:w-full">
-        <FileCheck2 className="size-4" /> Get fresh KYB Basic report
-        <span className="font-normal tnum">· {price}</span>
-      </Button>
-    );
-  const downloadBaseline = () => toast({ title: "Downloading baseline report", body: `KYB Basic for ${m.name}, generated ${formatDate(m.createdAt)}.` });
+  // Every KYB Basic held on this company, newest first: the monitor's baseline plus any bought since. Unfulfilled orders produced no report.
+  const basics: BasicReport[] = reportOrders
+    .filter((o) => o.regNo === m.regNo && o.type === "basic" && o.status !== "unfulfilled")
+    .map((o) => ({ id: o.id, date: o.createdAt.slice(0, 10), baseline: o.monitorId === m.id, processing: o.status === "processing" }));
+  // Monitors outside the demo order history still have a baseline; it opens from the monitor's id.
+  if (m.status !== "inactive" && !basics.some((b) => b.baseline)) basics.push({ id: m.id, date: m.createdAt, baseline: true, processing: false });
+  const downloadReport = (b: BasicReport) => toast({ title: "Downloading KYB Basic report", body: `${m.name}, generated ${formatDate(b.date)}.` });
 
   // What each status says about the monitor. Inactive never ran, so it claims no baseline or cost. Check timing is never shown.
   const facts: Array<[string, ReactNode]> =
@@ -189,7 +178,19 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
       <div className="grid rounded-[8px] border border-border-subtle bg-background-elevated lg:grid-cols-[288px_minmax(0,1fr)]">
         <aside aria-labelledby="details-h" className="border-border-subtle max-lg:border-b lg:border-r">
           <div className="flex flex-col gap-6 p-5 lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-76px)] lg:overflow-y-auto">
-            <PkybDetails m={m} facts={facts} baselineReady={baselineReady} onViewBaseline={onViewBaseline} onDownloadBaseline={downloadBaseline} onStop={() => setStopping(true)} />
+            {/* The monitor's two actions lead the rail, one above the other at the same size. A new report is ordered from Choose a Report. */}
+            <div className="flex flex-col gap-2">
+              <Button variant="primary" size="sm" onClick={() => navigate(`/report/${m.id}`)} className="w-full max-sm:h-10">
+                <FilePlus2 className="size-4" aria-hidden /> Get New KYB Report
+              </Button>
+              {active && (
+                <Button variant="danger-outline" size="sm" onClick={() => setStopping(true)} className="w-full max-sm:h-10">
+                  <CircleStop className="size-4" aria-hidden /> Stop monitoring
+                </Button>
+              )}
+            </div>
+            <PkybDetails m={m} facts={facts} />
+            {basics.length > 0 && <BasicHistory reports={basics} baselineReady={baselineReady} onViewBaseline={onViewBaseline} onDownload={downloadReport} />}
             {m.events.length > 0 && (
               <section aria-labelledby="mix-h" aria-live="polite" className="border-t border-border-subtle pt-5">
                 <h2 id="mix-h" className="text-[14px] font-semibold text-content-primary">
@@ -315,10 +316,6 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                       </label>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 max-sm:w-full">
-                    {reportState === "ready" && <span className="text-[12px] text-interactive-primary">Ready · generated {formatDate(iso(TODAY))}</span>}
-                    {freshReport}
-                  </div>
                 </div>
                 <div className="overflow-hidden rounded-[6px] border border-border-subtle bg-white">
                   {log.length === 0 ? (
@@ -389,37 +386,6 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
 
       <StopDialog targets={stopping ? [{ id: m.id, name: m.name }] : []} onClose={() => setStopping(false)} />
       <CreateMonitorDialog company={creating} onClose={() => setCreating(null)} />
-      <Dialog
-        open={confirmingReport}
-        onClose={() => setConfirmingReport(false)}
-        width={480}
-        labelledBy="fresh-report-title"
-        title="Get a fresh KYB Basic report?"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmingReport(false)} data-autofocus="">
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setConfirmingReport(false);
-                requestReport(m.id);
-              }}
-            >
-              Get report · {price}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3 text-[14px] text-content-main">
-          <p>
-            This uses <span className="font-semibold text-content-primary tnum">{price}</span> for <span className="font-semibold text-content-primary">{m.name}</span>. The report shows the registry's
-            current record, so you can compare it with your baseline from {formatDate(m.createdAt)}.
-          </p>
-          <p>Each fresh report is charged separately.</p>
-        </div>
-      </Dialog>
     </div>
   );
 }
@@ -436,24 +402,8 @@ function LogChange({ categories, was }: { categories: Monitor["events"][number][
   );
 }
 
-/** The rail's pKYB Details: status, what the monitor costs and how long it runs, and the baseline it compares against. */
-function PkybDetails({
-  m,
-  facts,
-  baselineReady,
-  onViewBaseline,
-  onDownloadBaseline,
-  onStop,
-}: {
-  m: Monitor;
-  facts: Array<[string, ReactNode]>;
-  baselineReady: boolean;
-  onViewBaseline?: () => void;
-  onDownloadBaseline: () => void;
-  onStop: () => void;
-}) {
-  const viewClass =
-    "inline-flex h-8 flex-1 items-center justify-center rounded-[4px] border border-interactive-primary bg-white text-[13px] font-semibold text-interactive-primary transition-colors hover:bg-interactive-accent max-sm:h-10";
+/** The rail's pKYB Details: status, what the monitor costs and how long it runs. */
+function PkybDetails({ m, facts }: { m: Monitor; facts: Array<[string, ReactNode]> }) {
   return (
     <section aria-labelledby="details-h">
       <div className="flex items-center justify-between gap-3">
@@ -471,39 +421,76 @@ function PkybDetails({
           </div>
         ))}
       </dl>
-      {m.status !== "inactive" && (
-        <div className="mt-4 rounded-[6px] border border-border-subtle bg-white p-3.5">
-          <p className="text-[12px] font-semibold text-content-main">Baseline report</p>
-          <div className="mt-2 flex items-start gap-3">
-            {baselineReady ? <FileCheck2 className="mt-0.5 size-5 shrink-0 text-interactive-primary" aria-hidden /> : <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-content-tertiary" aria-hidden />}
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold text-content-primary">KYB Basic</p>
-              <p className="text-[12px] text-content-tertiary tnum">{baselineReady ? `Generated ${formatDate(m.createdAt)}` : "Generating…"}</p>
-            </div>
-          </div>
-          {baselineReady && (
-            <div className="mt-3 flex gap-2">
-              {onViewBaseline ? (
-                <button onClick={onViewBaseline} className={viewClass}>
-                  View
-                </button>
-              ) : (
-                <Link to={`/reports/${m.id}`} className={viewClass}>
-                  View
-                </Link>
+    </section>
+  );
+}
+
+type BasicReport = { id: string; date: string; baseline: boolean; processing: boolean };
+const HISTORY_PREVIEW = 4;
+
+/**
+ * Every KYB Basic held on the company, newest first. The monitor compares against the one tagged Baseline; the rest
+ * were bought since, and stay listed so they aren't lost behind the baseline. Long histories collapse to the latest few.
+ */
+function BasicHistory({
+  reports,
+  baselineReady,
+  onViewBaseline,
+  onDownload,
+}: {
+  reports: BasicReport[];
+  baselineReady: boolean;
+  onViewBaseline?: () => void;
+  onDownload: (b: BasicReport) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? reports : reports.slice(0, HISTORY_PREVIEW);
+  const iconAction = "grid size-8 shrink-0 place-items-center rounded-[4px] text-content-main transition-colors hover:bg-interactive-accent hover:text-interactive-primary max-sm:size-10";
+  return (
+    <section aria-labelledby="history-h" className="border-t border-border-subtle pt-5">
+      <h2 id="history-h" className="text-[14px] font-semibold text-content-primary">
+        KYB Basic History <span className="font-normal text-content-tertiary tnum">({nf.format(reports.length)})</span>
+      </h2>
+      <ul className="mt-2 divide-y divide-border-subtle">
+        {shown.map((b) => {
+          const pending = b.processing || (b.baseline && !baselineReady);
+          return (
+            <li key={b.id} className="flex items-center gap-3 py-2.5">
+              {pending ? <LoaderCircle className="size-5 shrink-0 animate-spin text-content-tertiary" aria-hidden /> : <FileCheck2 className="size-5 shrink-0 text-interactive-primary" aria-hidden />}
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[14px] font-semibold text-content-primary">
+                  KYB Basic
+                  {b.baseline && (
+                    <span className="inline-flex h-5 items-center rounded-full bg-interactive-primary px-2 text-[11px] font-semibold text-white">Baseline</span>
+                  )}
+                </p>
+                <p className="text-[12px] text-content-tertiary tnum">{pending ? "Generating…" : `Generated ${formatDate(b.date)}`}</p>
+              </div>
+              {!pending && (
+                <span className="flex shrink-0 items-center">
+                  {b.baseline && onViewBaseline ? (
+                    <button onClick={onViewBaseline} aria-label={`View KYB Basic from ${formatDate(b.date)}`} title="View" className={iconAction}>
+                      <Eye className="size-4" aria-hidden />
+                    </button>
+                  ) : (
+                    <Link to={`/reports/${b.id}`} aria-label={`View KYB Basic from ${formatDate(b.date)}`} title="View" className={iconAction}>
+                      <Eye className="size-4" aria-hidden />
+                    </Link>
+                  )}
+                  <button onClick={() => onDownload(b)} aria-label={`Download KYB Basic from ${formatDate(b.date)}`} title="Download" className={iconAction}>
+                    <Download className="size-4" aria-hidden />
+                  </button>
+                </span>
               )}
-              <Button size="sm" variant="ghost" onClick={onDownloadBaseline} className="flex-1 border border-border-subtle">
-                <Download className="size-4" aria-hidden /> Download
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-      {/* Stop confirms first, so it can sit in the open; it stays outlined and below the facts it would end. */}
-      {m.status === "active" && (
-        <Button variant="danger-outline" size="sm" onClick={onStop} className="mt-4 w-full max-sm:h-10">
-          <CircleStop className="size-4" aria-hidden /> Stop monitoring
-        </Button>
+            </li>
+          );
+        })}
+      </ul>
+      {reports.length > HISTORY_PREVIEW && (
+        <button onClick={() => setExpanded(!expanded)} className="mt-1 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
+          {expanded ? "Show fewer" : `Show all ${nf.format(reports.length)}`}
+          <ChevronDown className={cx("size-3.5 transition-transform", expanded && "rotate-180")} aria-hidden />
+        </button>
       )}
     </section>
   );

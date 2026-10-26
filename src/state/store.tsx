@@ -51,13 +51,10 @@ type Store = {
   setReviewed: (eventIds: string[], reviewed: boolean) => void;
   /** Marks events reviewed and shows a toast with Undo. */
   reviewWithUndo: (eventIds: string[], label?: string, body?: string) => void;
-  reports: Record<string, "generating" | "ready">;
   /** Every report order on the account, newest first: what View Reports lists. */
   reportOrders: ReportOrder[];
   /** Places a one-off report order. It shows as Processing in View Reports, then turns Completed. */
   orderReport: (c: Company, type: ReportType, opts?: { aml?: boolean }) => ReportOrder;
-  /** The list the analyst opened a company from, so the company page can offer "Next". */
-  requestReport: (monitorId: string) => void;
   toasts: Toast[];
   toast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: number) => void;
@@ -78,7 +75,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     daily: { low: false, medium: false, high: false },
   });
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [reports, setReports] = useState<Record<string, "generating" | "ready">>({});
   const seq = useRef(0);
   const orderSeq = useRef(1);
 
@@ -116,10 +112,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [setReviewed, toast],
   );
-  const requestReport = useCallback((monitorId: string) => {
-    setReports((r) => ({ ...r, [monitorId]: "generating" }));
-    window.setTimeout(() => setReports((r) => ({ ...r, [monitorId]: "ready" })), 3000);
-  }, []);
 
   /** A new order, stamped with today's demo date and the current clock time. */
   const newOrder = useCallback((c: Company, type: ReportType, extra: Partial<ReportOrder>): ReportOrder => {
@@ -197,15 +189,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ),
       setReviewed,
       reviewWithUndo,
-      reports,
-      requestReport,
       reportOrders,
       orderReport,
       toasts,
       toast,
       dismissToast,
     }),
-    [monitors, severity, preview, settingsVariant, severityChange, prefs, toasts, toast, dismissToast, setReviewed, reviewWithUndo, reports, requestReport, reportOrders, orderReport, newOrder],
+    [monitors, severity, preview, settingsVariant, severityChange, prefs, toasts, toast, dismissToast, setReviewed, reviewWithUndo, reportOrders, orderReport, newOrder],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

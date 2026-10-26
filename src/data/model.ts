@@ -502,5 +502,23 @@ export function generateReportOrders(monitors: Monitor[]): ReportOrder[] {
       at(iso(addDays(TODAY, -daysAgo))),
     );
   }
+
+  // Fresh KYB Basics bought on monitored companies after their baseline, so a monitor's report history has more than one.
+  const FRESH: Array<[number, number[]]> = [
+    [0, [0.35, 0.7, 0.92]],
+    [1, [0.6]],
+    [2, [0.5, 0.85]],
+  ];
+  for (const [i, spans] of FRESH) {
+    const m = monitors[i];
+    if (!m || m.status === "inactive") continue;
+    const age = Math.round((TODAY.getTime() - new Date(m.createdAt + "T00:00:00").getTime()) / 86400000);
+    for (const f of spans) {
+      push(
+        { companyName: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, user: pickFrom(r, TEAM), type: "basic", status: "completed", aml: false },
+        at(iso(addDays(TODAY, -Math.max(1, Math.round(age * (1 - f)))))),
+      );
+    }
+  }
   return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }

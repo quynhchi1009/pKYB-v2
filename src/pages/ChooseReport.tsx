@@ -59,7 +59,11 @@ type Version = (typeof VERSIONS)[number]["id"];
 
 export function ChooseReport() {
   const { id } = useParams();
-  const company = SEARCH_COMPANIES.find((c) => c.id === id);
+  const { monitors } = useStore();
+  // A monitor's "Get New KYB Report" lands here with the monitor's id, so monitored companies resolve too.
+  const m = monitors.find((x) => x.id === id);
+  const company: Company | undefined =
+    SEARCH_COMPANIES.find((c) => c.id === id) ?? (m && { id: m.id, name: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, status: "Registered" });
   if (!company) {
     return (
       <div className="mx-auto max-w-[640px] px-4 py-24 text-center">
