@@ -125,23 +125,16 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
   if (m.status !== "inactive" && !basics.some((b) => b.baseline)) basics.push({ id: m.id, date: m.createdAt, baseline: true, processing: false });
   const downloadReport = (b: BasicReport) => toast({ title: "Downloading KYB Basic report", body: `${m.name}, generated ${formatDate(b.date)}.` });
 
-  // What each status says about the monitor. Inactive never ran, so it claims no baseline or cost. Check timing is never shown.
+  // What each status says about the monitor; its start date is in the details header. Inactive never ran, so it claims no baseline or cost. Check timing is never shown.
   const facts: Array<[string, ReactNode]> =
     m.status === "active"
       ? [
-          ["Monitoring since", formatDate(m.createdAt)],
           ["Duration", "Until you stop it"],
           ["Cost", `${PRICING.monitorCredits} credits / year`],
         ]
       : m.status === "stopped"
-        ? [
-            ["Monitoring since", formatDate(m.createdAt)],
-            ["Stopped", formatDate(m.endedAt ?? m.lastChecked)],
-          ]
-        : [
-            ["Ordered", formatDate(m.createdAt)],
-            ["Status", "Setup failed"],
-          ];
+        ? [["Stopped", formatDate(m.endedAt ?? m.lastChecked)]]
+        : [["Status", "Setup failed"]];
 
   const yearSummary = yearEvents.length
     ? `${plural(yearEvents.length, "change", "changes")} on ${plural(yearDays, "day", "days")} · latest ${formatDate(yearEvents[0].date)}`
@@ -190,7 +183,6 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
               )}
             </div>
             <PkybDetails m={m} facts={facts} />
-            {basics.length > 0 && <BasicHistory reports={basics} baselineReady={baselineReady} onViewBaseline={onViewBaseline} onDownload={downloadReport} />}
             {m.events.length > 0 && (
               <section aria-labelledby="mix-h" aria-live="polite" className="border-t border-border-subtle pt-5">
                 <h2 id="mix-h" className="text-[14px] font-semibold text-content-primary">
@@ -218,6 +210,7 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                 </button>
               </section>
             )}
+            {basics.length > 0 && <BasicHistory reports={basics} baselineReady={baselineReady} onViewBaseline={onViewBaseline} onDownload={downloadReport} />}
           </div>
         </aside>
 
@@ -402,25 +395,47 @@ function LogChange({ categories, was }: { categories: Monitor["events"][number][
   );
 }
 
-/** The rail's pKYB Details: status, what the monitor costs and how long it runs. */
+/**
+ * The rail's pKYB Details, collapsed by default: the header keeps status and start date in view, and the reference
+ * facts (duration, cost) open on demand so the severity summary below sits higher in the rail.
+ */
 function PkybDetails({ m, facts }: { m: Monitor; facts: Array<[string, ReactNode]> }) {
+  const [open, setOpen] = useState(false);
   return (
-    <section aria-labelledby="details-h">
-      <div className="flex items-center justify-between gap-3">
-        <h2 id="details-h" className="font-sans text-[13px] font-normal text-content-main uppercase">
-          pKYB Details
-        </h2>
-        <StatusBadge status={m.status} />
-      </div>
-      <p className="mt-2 text-[12px] leading-snug text-content-tertiary">{STATUS_COPY[m.status].explain}</p>
-      <dl className="mt-4 divide-y divide-border-subtle border-y border-border-subtle text-[13px]">
-        {facts.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-4 py-2.5">
-            <dt className="text-content-main">{k}</dt>
-            <dd className="text-right font-medium text-content-primary tnum">{v}</dd>
+    <section aria-labelledby="details-h" className="rounded-[6px] border border-border-subtle bg-white">
+      <h2 id="details-h">
+        <button
+          aria-expanded={open}
+          aria-controls="details-body"
+          onClick={() => setOpen(!open)}
+          className="flex min-h-12 w-full items-center gap-3 rounded-[6px] px-3.5 py-2.5 text-left transition-colors hover:bg-background-accent"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block font-sans text-[13px] font-normal text-content-main uppercase">pKYB Details</span>
+            <span className="block text-[12px] text-content-tertiary tnum">
+              {m.status === "inactive" ? `Ordered ${formatDate(m.createdAt)}` : `Since ${formatDate(m.createdAt)}`}
+            </span>
+          </span>
+          <StatusBadge status={m.status} />
+          <ChevronDown className={cx("size-4 shrink-0 text-content-main transition-transform duration-300 ease-out-expo", open && "rotate-180")} aria-hidden />
+        </button>
+      </h2>
+      {/* Rows animate open from 0fr to 1fr; inert keeps the hidden facts out of the tab order and the reading order. */}
+      <div id="details-body" inert={!open} className={cx("grid transition-[grid-template-rows] duration-300 ease-out-expo", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+        <div className="overflow-hidden">
+          <div className="px-3.5 pb-1">
+            <p className="border-t border-border-subtle pt-3 text-[12px] leading-snug text-content-tertiary">{STATUS_COPY[m.status].explain}</p>
+            <dl className="mt-2 divide-y divide-border-subtle text-[13px]">
+              {facts.map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-4 py-2.5">
+                  <dt className="text-content-main">{k}</dt>
+                  <dd className="text-right font-medium text-content-primary tnum">{v}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
-        ))}
-      </dl>
+        </div>
+      </div>
     </section>
   );
 }
