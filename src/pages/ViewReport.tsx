@@ -256,12 +256,6 @@ function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monito
             )}
           </p>
         </div>
-        {/* No running monitor on this company: offer one, confirmed in the order dialog (Version B) that prices the monitor and its KYB Basic baseline. */}
-        {canCreate && (
-          <Button variant="secondary" size="sm" onClick={() => setCreating(asCompany)}>
-            <Eye className="size-4" aria-hidden /> Create pKYB
-          </Button>
-        )}
       </header>
 
       {/* One tab strip for the company: each language of the report, then its pKYB monitor. The monitor tab keeps
@@ -325,6 +319,12 @@ function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monito
             </button>
           )}
         </div>
+        {/* No running monitor on this company: offer one, confirmed in the order dialog (Version B) that prices the monitor and its KYB Basic baseline. */}
+        {canCreate && (
+          <Button variant="secondary" size="sm" onClick={() => setCreating(asCompany)}>
+            <Eye className="size-4" aria-hidden /> Create pKYB
+          </Button>
+        )}
       </div>
 
       {onPkyb && monitor && (
