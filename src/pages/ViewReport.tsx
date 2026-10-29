@@ -321,9 +321,12 @@ function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monito
         </div>
         {/* No running monitor on this company: offer one, confirmed in the order dialog (Version B) that prices the monitor and its KYB Basic baseline. */}
         {canCreate && (
-          <Button variant="secondary" size="sm" onClick={() => setCreating(asCompany)}>
-            <Eye className="size-4" aria-hidden /> Create pKYB
-          </Button>
+          <>
+            {order && <span className="h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />}
+            <Button variant="secondary" size="sm" onClick={() => setCreating(asCompany)}>
+              <Eye className="size-4" aria-hidden /> Create pKYB
+            </Button>
+          </>
         )}
       </div>
 

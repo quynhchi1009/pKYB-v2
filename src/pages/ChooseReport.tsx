@@ -1,10 +1,9 @@
 import { useId, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, BadgeCheck, ChevronDown, CircleHelp, FileText, FileUser, Eye, TextSearch, type LucideIcon } from "lucide-react";
 import { PKYB_UNSUPPORTED, PRICING, SEARCH_COMPANIES, TODAY, iso, jurisdictionByCode, type Company, type ReportType } from "../data/model";
 import { useStore } from "../state/store";
 import { Button, Flag, NewTag, cx, formatDate } from "../components/ui";
-import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { PkybInfoDialog } from "../components/PkybInfoDialog";
 
 // Ordered from lightest to most complete, so the list reads as a ladder. `parts` is what each report is made of.
@@ -46,16 +45,6 @@ const PRODUCT_TABS = [
 const VIEW_TABS = ["Configure", "Compare"] as const;
 /** pKYB monitors are built on a KYB Basic baseline, so only that report offers it. */
 const PKYB_REPORT = "basic";
-/**
- * Two candidate flows for explaining pKYB before the report is generated, switchable with `?v=` for review:
- * A (low-key) puts "Find out more" on the pKYB checkbox; B (higher-key) confirms the add-on in a dialog
- * after Generate report.
- */
-const VERSIONS = [
-  { id: "a", label: "A · Find out more" },
-  { id: "b", label: "B · Confirm on generate" },
-] as const;
-type Version = (typeof VERSIONS)[number]["id"];
 
 export function ChooseReport() {
   const { id } = useParams();
@@ -94,10 +83,7 @@ function ReportPage({ company }: { company: Company }) {
   const [sampleId, setSampleId] = useState<string | null>(null);
   const [lang, setLang] = useState({ en: false, og: false });
   const [pkyb, setPkyb] = useState(false);
-  const [params, setParams] = useSearchParams();
-  const version: Version = params.get("v") === "b" ? "b" : "a";
   const [infoOpen, setInfoOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const selected = REPORTS.find((r) => r.id === report)!;
   const offersPkyb = report === PKYB_REPORT;
   const unsupported = PKYB_UNSUPPORTED.has(company.jurisdiction);
@@ -117,14 +103,6 @@ function ReportPage({ company }: { company: Company }) {
   const summary = [selected.name, ...(aml ? ["AML (Company)"] : []), ...(monitoring ? ["Monitoring"] : []), ...(addPkyb ? ["pKYB monitoring"] : [])].join(" + ");
 
   const generate = () => {
-    if (addPkyb && version === "b") {
-      setConfirmOpen(true);
-      return;
-    }
-    placeOrder();
-  };
-
-  const placeOrder = () => {
     if (addPkyb) {
       const m = createMonitor(company);
       toast({ title: "Report generated and monitoring started", body: `This KYB Basic report is the baseline for ${company.name}. Later changes are compared against it.` });
@@ -375,7 +353,7 @@ function ReportPage({ company }: { company: Company }) {
                     unsupported={unsupported}
                     checked={pkyb}
                     onChange={setPkyb}
-                    onLearnMore={version === "a" ? () => setInfoOpen(true) : undefined}
+                    onLearnMore={() => setInfoOpen(true)}
                   />
                 </div>
               )}
@@ -438,35 +416,6 @@ function ReportPage({ company }: { company: Company }) {
       </div>
 
       <PkybInfoDialog company={company} open={infoOpen} added={pkyb} onAdd={() => setPkyb(true)} onClose={() => setInfoOpen(false)} />
-      <CreateMonitorDialog
-        company={confirmOpen ? company : null}
-        onClose={() => setConfirmOpen(false)}
-        order={{ extras: [...(aml ? ["AML (Company)"] : []), ...(monitoring ? ["Monitoring"] : [])], onConfirm: placeOrder }}
-      />
-
-      {/* Review control for the two pKYB flows. Not part of either design. */}
-      <div role="group" aria-label="Prototype version" className="fixed bottom-4 left-4 z-40 flex items-center gap-1 rounded-full bg-background-system p-1 pl-3 text-[12px] text-white shadow-pop lg:left-[276px]">
-        <span className="mr-1 font-semibold text-chrome-content-tertiary">Prototype</span>
-        {VERSIONS.map((v) => (
-          <button
-            key={v.id}
-            aria-pressed={version === v.id}
-            onClick={() => {
-              const next = new URLSearchParams(params);
-              next.set("v", v.id);
-              setParams(next, { replace: true });
-              setInfoOpen(false);
-              setConfirmOpen(false);
-            }}
-            className={cx(
-              "h-7 rounded-full px-3 font-semibold transition-colors",
-              version === v.id ? "bg-white text-content-primary" : "text-chrome-content-main hover:bg-chrome-control-hover hover:text-white",
-            )}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -498,8 +447,8 @@ function PkybOption({
   unsupported: boolean;
   checked: boolean;
   onChange: (v: boolean) => void;
-  /** Version A: a "Find out more" link that opens the pKYB explainer. */
-  onLearnMore?: () => void;
+  /** The "Find out more" link that opens the pKYB explainer. */
+  onLearnMore: () => void;
 }) {
   if (monitorId) {
     return (
@@ -543,22 +492,18 @@ function PkybOption({
         </span>
         <span className="mt-0.5 block text-[12px] leading-snug text-content-main">
           Alerts when the registry record changes. This report becomes the baseline.
-          {onLearnMore && (
-            <>
-              {" "}
-              <button
-                type="button"
-                onClick={(e) => {
-                  // Inside the checkbox's label: open the explainer without toggling the box.
-                  e.preventDefault();
-                  onLearnMore();
-                }}
-                className="font-semibold whitespace-nowrap text-content-link underline underline-offset-2 hover:no-underline"
-              >
-                Find out more
-              </button>
-            </>
-          )}
+          {" "}
+          <button
+            type="button"
+            onClick={(e) => {
+              // Inside the checkbox's label: open the explainer without toggling the box.
+              e.preventDefault();
+              onLearnMore();
+            }}
+            className="font-semibold whitespace-nowrap text-content-link underline underline-offset-2 hover:no-underline"
+          >
+            Find out more
+          </button>
         </span>
       </span>
     </label>
