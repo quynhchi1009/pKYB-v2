@@ -28,7 +28,7 @@ import { applyFilters, buildRow, filtersFromParams, type Filters, type Row } fro
 import { StopDialog } from "../components/StopDialog";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { Button, ChangeChips, Flag, Menu, SEV_STYLE, Select, cx, formatDate, nf } from "../components/ui";
-import { SettingsButton, SettingsVariantSwitch } from "../components/SettingsPanel";
+import { SettingsButton } from "../components/SettingsPanel";
 
 type Tab = "active" | "feed" | "history";
 type Update = (patch: Record<string, string | null>) => void;
@@ -128,7 +128,6 @@ export function Monitoring() {
         </div>
         <SettingsButton />
       </header>
-      <SettingsVariantSwitch />
 
       {/* Portfolio summary. The per-day heatmap lives on each company page; across hundreds of monitors it only adds noise. */}
       <section aria-label="Portfolio summary" className="@container mt-6">

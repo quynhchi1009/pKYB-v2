@@ -30,16 +30,8 @@ export type Toast = { id: number; title: string; body?: string; tone?: "success"
 
 type Store = {
   monitors: Monitor[];
-  /** The mapping every view colours by: the saved mapping, or the unsaved draft while the settings side panel previews it. */
+  /** The saved mapping every view colours by. */
   severity: SeverityMap;
-  /** The mapping as saved, whatever is being previewed. */
-  savedSeverity: SeverityMap;
-  /** Recolours the app with an unsaved mapping (the side-panel settings variant); null ends the preview. */
-  previewSeverity: (map: SeverityMap | null) => void;
-  previewing: boolean;
-  /** Prototype review switch for how Severity & alerts opens: A, a modal popup; B, a right side panel. */
-  settingsVariant: "a" | "b";
-  setSettingsVariant: (v: "a" | "b") => void;
   /** Replaces the whole mapping and records who changed it, so the page can show attribution. */
   saveSeverity: (map: SeverityMap, summary: string) => void;
   severityChange: SeverityChange | null;
@@ -66,8 +58,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [monitors, setMonitors] = useState<Monitor[]>(() => generateMonitors());
   const [reportOrders, setReportOrders] = useState<ReportOrder[]>(() => generateReportOrders(monitors));
   const [severity, setSeverityMap] = useState<SeverityMap>(DEMO_ORG_SEVERITY);
-  const [preview, setPreview] = useState<SeverityMap | null>(null);
-  const [settingsVariant, setSettingsVariant] = useState<"a" | "b">("a");
   const [severityChange, setSeverityChange] = useState<SeverityChange | null>(null);
   const [prefs, setPrefs] = useState<NotifyPrefs>({
     inApp: { low: false, medium: true, high: true },
@@ -151,12 +141,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Store>(
     () => ({
       monitors,
-      severity: preview ?? severity,
-      savedSeverity: severity,
-      previewSeverity: setPreview,
-      previewing: !!preview,
-      settingsVariant,
-      setSettingsVariant,
+      severity,
       saveSeverity: (map, summary) => {
         setSeverityMap(map);
         setSeverityChange({ summary, by: "You", at: iso(TODAY) });
@@ -195,7 +180,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast,
       dismissToast,
     }),
-    [monitors, severity, preview, settingsVariant, severityChange, prefs, toasts, toast, dismissToast, setReviewed, reviewWithUndo, reportOrders, orderReport, newOrder],
+    [monitors, severity, severityChange, prefs, toasts, toast, dismissToast, setReviewed, reviewWithUndo, reportOrders, orderReport, newOrder],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
