@@ -225,7 +225,7 @@ function EntryPointGraphic({ onClose }: { onClose: () => void }) {
           </div>
           <div className="px-5 pt-4">
             <p className="truncate font-heading text-[13px] font-bold">
-              Shenzhen Tencent Computer System Co., Ltd <span className="mx-1 font-normal">|</span> <span lang="zh">深圳市腾讯计算机系统有限公司</span>
+              XYZ Technology Systems Company Limited <span className="mx-1 font-normal">|</span> <span lang="zh">XYZ技术系统有限公司</span>
             </p>
             <div className="mt-3 flex gap-2.5">
               {["KYB", "UBO", "Legal Documents"].map((p, i) => (
