@@ -100,6 +100,15 @@ export const creditsLabel = (n: number | null) => (n === null ? "xx credits" : `
 export const totalTodayLabel = () =>
   PRICING.kybBasicCredits === null ? `${PRICING.monitorCredits} + xx credits` : creditsLabel(PRICING.monitorCredits + PRICING.kybBasicCredits);
 
+/** One report's price in credits, or null while it is unconfirmed. Only KYB Basic has a price on file, and it is still "xx". */
+export const reportCredits = (type: ReportType): number | null => (type === "basic" ? PRICING.kybBasicCredits : null);
+/** What a cart costs today: known amounts summed, with "xx" standing in for any report price not confirmed yet. */
+export function cartTotalLabel(reports: ReportType[], pkybCount: number) {
+  const known = reports.reduce((n, t) => n + (reportCredits(t) ?? 0), 0) + pkybCount * PRICING.monitorCredits;
+  if (!reports.some((t) => reportCredits(t) === null)) return creditsLabel(known);
+  return known ? `${known} + xx credits` : "xx credits";
+}
+
 export type ChangeEvent = {
   id: string;
   monitorId: string;

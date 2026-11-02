@@ -193,6 +193,17 @@ dialog[open] {
   }
 }
 
+/* The cart slides in from the right edge it is anchored to. */
+dialog.drawer[open] {
+  animation: drawer-in 320ms var(--ease-out-expo);
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(36px);
+  }
+}
+
 .toast-in {
   animation: toast-in 260ms var(--ease-out-expo);
 }

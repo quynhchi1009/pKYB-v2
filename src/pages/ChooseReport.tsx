@@ -69,7 +69,7 @@ export function ChooseReport() {
 
 function ReportPage({ company }: { company: Company }) {
   const j = jurisdictionByCode[company.jurisdiction];
-  const { monitors, createMonitor, orderReport, toast } = useStore();
+  const { monitors, createMonitor, orderReport, addToCart, toast } = useStore();
   const navigate = useNavigate();
   const monitor = monitors.find((m) => m.regNo === company.regNo && m.status === "active");
   const [product, setProduct] = useState("kyb");
@@ -100,7 +100,18 @@ function ReportPage({ company }: { company: Company }) {
           ? "Choose a language to continue."
           : null;
   const ready = !missing;
-  const summary = [selected.name, ...(aml ? ["AML (Company)"] : []), ...(monitoring ? ["Monitoring"] : []), ...(addPkyb ? ["pKYB monitoring"] : [])].join(" + ");
+
+  // The cart keeps what the slip shows: pKYB rides on the KYB Basic line, as it does in Your Report.
+  const addToOrder = () =>
+    addToCart({
+      company,
+      report: selected.id as ReportType,
+      languages: (["en", "og"] as const).filter((l) => lang[l]),
+      aml,
+      matchType: aml ? matchType : undefined,
+      monitoring: monitoring ? { frequency, expiry } : undefined,
+      pkyb: addPkyb,
+    });
 
   const generate = () => {
     if (addPkyb) {
@@ -402,7 +413,7 @@ function ReportPage({ company }: { company: Company }) {
               <Button variant="primary" disabled={!ready} onClick={generate} className="w-full">
                 Generate report
               </Button>
-              <Button disabled={!ready} onClick={() => toast({ title: "Added to cart", body: `${summary} for ${company.name}.` })} className="w-full">
+              <Button disabled={!ready} onClick={addToOrder} className="w-full">
                 Add to cart
               </Button>
               {missing && (

@@ -5,6 +5,7 @@ import {
   Bell,
   CircleArrowLeft,
   CodeXml,
+  FileDiff,
   Gem,
   Headset,
   KeyRound,
@@ -21,8 +22,10 @@ import {
 } from "lucide-react";
 import { useStore } from "../state/store";
 import { CATEGORY_LABEL, RECENT_DAYS, SEVERITY_LABEL, SEVERITY_RANK, isRecent, worstSeverity } from "../data/model";
-import { NewTag, SEV_STYLE, Toasts, cx, formatDate } from "./ui";
-import { SettingsHost, useOpenSettings } from "./SettingsPanel";
+import { NewTag, SEV_STYLE, Toasts, cx, formatNoticeDate } from "./ui";
+import { SettingsHost } from "./SettingsPanel";
+import { CartDrawer } from "./CartDrawer";
+import { AnnouncementHost } from "./PkybAnnouncement";
 
 /* The AsiaVerify wordmark: teal mark and "Asia", white "Verify", on a transparent ground for the charcoal sidebar.
    Collapsed, the frame narrows to the mark alone (the left 530 of 1972px). */
@@ -42,28 +45,44 @@ function titleFor(path: string) {
   return "Perpetual KYB (pKYB)";
 }
 
+/* Portal2 notifications come in kinds, each with its own line icon. pKYB change alerts are a kind of their own,
+   drawn as a document with a change mark: the registry record changed. */
+const NOTICE_KIND = {
+  pkybChange: { icon: FileDiff, title: "pKYB Change" },
+} as const;
+
+const joinNames = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+
+/** Portal2's notifications popover: Refresh and Clear all in the header, a list of icon rows, dismissed one by one. */
 function NotificationBell() {
   const { monitors, severity, prefs } = useStore();
-  const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
+  const [cleared, setCleared] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
-  const items = useMemo(() => {
-    const out: Array<{ id: string; monitorId: string; name: string; date: string; label: string; sev: ReturnType<typeof worstSeverity> }> = [];
+  const all = useMemo(() => {
+    const out: Array<{ id: string; monitorId: string; name: string; date: string; sev: ReturnType<typeof worstSeverity>; changed: string }> = [];
     for (const m of monitors) {
       if (m.status !== "active") continue;
       for (const e of m.events) {
         if (!isRecent(e)) continue;
         const sev = worstSeverity(e.categories, severity);
         if (!prefs.inApp[sev]) continue;
-        out.push({ id: e.id, monitorId: m.id, name: m.name, date: e.date, sev, label: e.categories.map((c) => CATEGORY_LABEL[c]).join(", ") });
+        out.push({ id: e.id, monitorId: m.id, name: m.name, date: e.date, sev, changed: joinNames(e.categories.map((c) => CATEGORY_LABEL[c])) });
       }
     }
     return out.sort((a, b) => (a.date === b.date ? SEVERITY_RANK[b.sev] - SEVERITY_RANK[a.sev] : a.date < b.date ? 1 : -1));
   }, [monitors, severity, prefs]);
+  // Clearing empties the bell, not the change feed: the changes themselves stay on record.
+  const items = all.filter((n) => !cleared.includes(n.id));
 
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
+  };
+  const refresh = () => {
+    setRefreshing(true);
+    window.setTimeout(() => setRefreshing(false), 700);
   };
 
   return (
@@ -93,56 +112,94 @@ function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-12 right-0 z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-[6px] border border-border-subtle bg-white text-content-primary shadow-pop">
-            <div className="flex items-baseline justify-between border-b border-border-subtle px-4 py-3">
-              <p className="text-[14px] font-semibold">pKYB alerts</p>
-              <button
-                onClick={() => {
-                  setOpen(false);
-                  // The popover closes as settings open, so focus returns to the bell instead.
-                  openSettings("notifications", trigger.current);
-                }}
-                className="text-[12px] text-content-link hover:underline"
-              >
-                Choose alerts
-              </button>
+          <div className="absolute top-[calc(100%+14px)] right-[-4px] z-50 w-[min(470px,calc(100vw-24px))] text-content-primary max-sm:fixed max-sm:inset-x-3 max-sm:top-[84px] max-sm:w-auto">
+            {/* The notch points at the bell, as Portal2's does. */}
+            <span aria-hidden className="absolute -top-[6px] right-[18px] size-3 rotate-45 border-t border-l border-portal-line bg-white max-sm:hidden" />
+            <div className="relative overflow-hidden rounded-[8px] bg-white ring-1 ring-portal-line shadow-portal">
+              <div className="px-6 pt-5">
+                <div className="flex items-center justify-between gap-3 border-b border-border-subtle pb-4">
+                  <h2 className="font-heading text-[16px] font-bold">Notifications</h2>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={refresh}
+                      aria-busy={refreshing}
+                      className="inline-flex h-7 items-center rounded-[4px] bg-portal-sidebar-selected px-3 text-[11px] font-bold tracking-[0.02em] text-white uppercase transition-colors hover:bg-background-demoted"
+                    >
+                      {refreshing ? "Refreshing" : "Refresh"}
+                    </button>
+                    <button
+                      onClick={() => setCleared(all.map((n) => n.id))}
+                      disabled={items.length === 0}
+                      className="inline-flex h-7 items-center rounded-[4px] bg-background-subtle px-3 text-[11px] font-bold tracking-[0.02em] text-content-primary uppercase transition-colors hover:bg-portal-line disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <ul className={cx("max-h-[380px] overflow-y-auto px-6 pt-2 pb-4 transition-opacity", refreshing && "opacity-50")}>
+                {items.length === 0 && (
+                  <li className="px-3 py-8 text-center text-[13px] text-content-main">
+                    {cleared.length > 0
+                      ? "You're all caught up. Cleared alerts stay in the change feed."
+                      : `No alerts in the last ${RECENT_DAYS} days at the severities you chose in Severity & alerts.`}
+                  </li>
+                )}
+                {items.slice(0, 12).map((n) => {
+                  const kind = NOTICE_KIND.pkybChange;
+                  return (
+                    <li key={n.id} className="group relative">
+                      <Link
+                        to={`/reports/${n.monitorId}?tab=pkyb`}
+                        state={{ from: "monitoring" }}
+                        onClick={() => setOpen(false)}
+                        className="flex gap-3 rounded-[8px] px-3 py-3 pr-10 transition-colors hover:bg-background-subtle focus-visible:bg-background-subtle"
+                      >
+                        <kind.icon className="size-7 shrink-0 text-content-primary" strokeWidth={1.5} aria-hidden />
+                        <span className="min-w-0 flex-1 text-[13px] leading-snug">
+                          <span className="block font-bold text-interactive-primary">
+                            {kind.title} -{" "}
+                            <span className={cx("uppercase", SEV_STYLE[n.sev].text)}>
+                              {SEVERITY_LABEL[n.sev]}
+                              <span className="sr-only"> severity</span>
+                            </span>
+                          </span>
+                          <span className="mt-0.5 block font-semibold text-content-primary">{n.name}</span>
+                          <span className="mt-1.5 block text-[12px] text-content-main">{n.changed} changed. Click here to view the change.</span>
+                          <span className="mt-2 block text-right text-[12px] text-content-tertiary tnum">{formatNoticeDate(n.date)}</span>
+                        </span>
+                      </Link>
+                      <button
+                        onClick={() => setCleared((c) => [...c, n.id])}
+                        aria-label={`Dismiss alert for ${n.name}`}
+                        className="absolute top-3 right-3 grid size-6 place-items-center rounded-[4px] text-content-primary opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-black/5 pointer-coarse:opacity-100"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-            <ul className="max-h-[360px] overflow-y-auto">
-              {items.length === 0 && <li className="px-4 py-6 text-center text-[13px] text-content-main">No alerts in the last {RECENT_DAYS} days at the severities you chose in Severity & alerts.</li>}
-              {items.slice(0, 8).map((n) => (
-                <li key={n.id}>
-                  <Link
-                    to={`/reports/${n.monitorId}?tab=pkyb`}
-                    state={{ from: "monitoring" }}
-                    onClick={() => setOpen(false)}
-                    className="flex gap-3 border-b border-border-subtle/70 px-4 py-3 hover:bg-base-contrast"
-                  >
-                    <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", SEV_STYLE[n.sev].dot)} aria-hidden />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold">
-                        <span className="sr-only">{SEVERITY_LABEL[n.sev]} severity. </span>
-                        {n.name}
-                      </span>
-                      <span className="block text-[12px] text-content-main">
-                        {n.label} changed · {formatDate(n.date)}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            {/* The feed opens on the same set the bell counts: recent changes at the severities you get alerts for. */}
-            <Link
-              to="/pkyb/monitoring?tab=feed&alerts=1"
-              onClick={() => setOpen(false)}
-              className="block px-4 py-2.5 text-center text-[13px] font-semibold text-interactive-primary hover:bg-interactive-accent"
-            >
-              {items.length ? `See all ${items.length} alerts in the change feed` : "Open the change feed"}
-            </Link>
           </div>
         </>
       )}
     </div>
+  );
+}
+
+function CartButton() {
+  const { cart, openCart } = useStore();
+  return (
+    <button
+      onClick={openCart}
+      aria-label={cart.length ? `Cart, ${cart.length} ${cart.length === 1 ? "item" : "items"}` : "Cart"}
+      className="relative grid size-10 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle"
+    >
+      <ShoppingCart className="size-6" strokeWidth={1.5} aria-hidden />
+      {cart.length > 0 && <span aria-hidden className="absolute top-1.5 right-1 size-2.5 rounded-full bg-interactive-primary ring-2 ring-white" />}
+    </button>
   );
 }
 
@@ -267,9 +324,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="truncate font-heading text-[18px] font-bold tracking-[0.01em] text-content-primary uppercase">{titleFor(loc.pathname)}</span>
           <div className="ml-auto flex items-center gap-2">
             <NotificationBell />
-            <Link to="/cart" aria-label="Cart" className="grid size-10 place-items-center rounded-[4px] text-content-primary hover:bg-background-subtle">
-              <ShoppingCart className="size-6" strokeWidth={1.5} aria-hidden />
-            </Link>
+            <CartButton />
             {/* Portal2's Get Help: an outlined green button, collapsing to an icon on phones. */}
             <button
               aria-label="Get help"
@@ -287,6 +342,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <Toasts />
       <SettingsHost />
+      <CartDrawer />
+      <AnnouncementHost />
     </div>
   );
 }

@@ -28,6 +28,19 @@ export type SeverityChange = { summary: string; by: string; at: string };
 
 export type Toast = { id: number; title: string; body?: string; tone?: "success" | "neutral"; action?: { label: string; onClick: () => void } };
 
+/** One report order waiting in the cart. A KYB Basic line can carry pKYB monitoring, which is built on that report. */
+export type CartItem = {
+  id: string;
+  company: Company;
+  report: ReportType;
+  languages: Array<"en" | "og">;
+  aml: boolean;
+  matchType?: string;
+  monitoring?: { frequency: string; expiry: string };
+  /** pKYB monitoring attached to this KYB Basic order: the report is its baseline. */
+  pkyb: boolean;
+};
+
 type Store = {
   monitors: Monitor[];
   /** The saved mapping every view colours by. */
@@ -47,6 +60,19 @@ type Store = {
   reportOrders: ReportOrder[];
   /** Places a one-off report order. It shows as Processing in View Reports, then turns Completed. */
   orderReport: (c: Company, type: ReportType, opts?: { aml?: boolean }) => ReportOrder;
+  cart: CartItem[];
+  cartOpen: boolean;
+  /** True right after an add, so the drawer can say so. It clears when the drawer closes. */
+  cartJustAdded: boolean;
+  openCart: () => void;
+  closeCart: () => void;
+  /** Adds an order and opens the cart. Ordering the same report for the same company again replaces the earlier line. */
+  addToCart: (item: Omit<CartItem, "id">) => void;
+  /** Removes lines and offers Undo. */
+  removeFromCart: (ids: string[]) => void;
+  setCartPkyb: (id: string, on: boolean) => void;
+  /** Places every cart line as a report order, starting a monitor where pKYB is attached. Empties the cart. */
+  checkout: () => { reports: number; monitors: number };
   toasts: Toast[];
   toast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: number) => void;
@@ -64,8 +90,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     weekly: { low: true, medium: true, high: true },
     daily: { low: false, medium: false, high: false },
   });
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cartJustAdded, setCartJustAdded] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seq = useRef(0);
+  const cartSeq = useRef(1);
   const orderSeq = useRef(1);
 
   // Toasts dismiss themselves (see Toasts in ui.tsx) so a hover or focus can pause the timer.
@@ -138,8 +168,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [newOrder, toast],
   );
 
-  const value = useMemo<Store>(
-    () => ({
+  const openCart = useCallback(() => setCartOpen(true), []);
+  const closeCart = useCallback(() => {
+    setCartOpen(false);
+    setCartJustAdded(false);
+  }, []);
+  const addToCart = useCallback((item: Omit<CartItem, "id">) => {
+    setCart((all) => [
+      { ...item, id: `cart-${cartSeq.current++}` },
+      ...all.filter((x) => !(x.company.id === item.company.id && x.report === item.report)),
+    ]);
+    setCartJustAdded(true);
+    setCartOpen(true);
+  }, []);
+  const removeFromCart = useCallback(
+    (ids: string[]) => {
+      const gone = cart.filter((x) => ids.includes(x.id));
+      if (!gone.length) return;
+      setCart((all) => all.filter((x) => !ids.includes(x.id)));
+      toast({
+        title: gone.length === 1 ? "Removed from cart" : `${gone.length} items removed from cart`,
+        body: gone.length === 1 ? gone[0].company.name : undefined,
+        action: { label: "Undo", onClick: () => setCart((all) => [...gone, ...all]) },
+      });
+    },
+    [cart, toast],
+  );
+  const setCartPkyb = useCallback((id: string, on: boolean) => setCart((all) => all.map((x) => (x.id === id ? { ...x, pkyb: on } : x))), []);
+
+  const value = useMemo<Store>(() => {
+    const createMonitor = (c: Company): Monitor => {
+      const existing = monitors.find((m) => m.regNo === c.regNo && m.status === "active");
+      if (existing) return existing;
+      const m: Monitor = {
+        id: `new-${c.id}`,
+        name: c.name,
+        localName: c.localName,
+        regNo: c.regNo,
+        jurisdiction: c.jurisdiction,
+        createdAt: iso(TODAY),
+        lastChecked: iso(TODAY),
+        status: "active",
+        events: [],
+      };
+      setMonitors((all) => [m, ...all]);
+      // The monitor's KYB Basic baseline is a report order like any other, so it lists in View Reports.
+      setReportOrders((all) => [newOrder(c, "basic", { status: "completed", monitorId: m.id }), ...all]);
+      return m;
+    };
+    return {
       monitors,
       severity,
       saveSeverity: (map, summary) => {
@@ -149,24 +226,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       severityChange,
       prefs,
       savePrefs: setPrefs,
-      createMonitor: (c) => {
-        const existing = monitors.find((m) => m.regNo === c.regNo && m.status === "active");
-        if (existing) return existing;
-        const m: Monitor = {
-          id: `new-${c.id}`,
-          name: c.name,
-          localName: c.localName,
-          regNo: c.regNo,
-          jurisdiction: c.jurisdiction,
-          createdAt: iso(TODAY),
-          lastChecked: iso(TODAY),
-          status: "active",
-          events: [],
-        };
-        setMonitors((all) => [m, ...all]);
-        // The monitor's KYB Basic baseline is a report order like any other, so it lists in View Reports.
-        setReportOrders((all) => [newOrder(c, "basic", { status: "completed", monitorId: m.id }), ...all]);
-        return m;
+      createMonitor,
+      checkout: () => {
+        let started = 0;
+        for (const item of cart) {
+          const watched = monitors.some((m) => m.regNo === item.company.regNo && m.status === "active");
+          if (item.pkyb && !watched) {
+            createMonitor(item.company);
+            started++;
+          } else {
+            orderReport(item.company, item.report, { aml: item.aml });
+          }
+        }
+        const placed = cart.length;
+        setCart([]);
+        return { reports: placed, monitors: started };
       },
       stopMonitors: (ids) =>
         setMonitors((all) =>
@@ -176,12 +250,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       reviewWithUndo,
       reportOrders,
       orderReport,
+      cart,
+      cartOpen,
+      cartJustAdded,
+      openCart,
+      closeCart,
+      addToCart,
+      removeFromCart,
+      setCartPkyb,
       toasts,
       toast,
       dismissToast,
-    }),
-    [monitors, severity, severityChange, prefs, toasts, toast, dismissToast, setReviewed, reviewWithUndo, reportOrders, orderReport, newOrder],
-  );
+    };
+  }, [
+    monitors,
+    severity,
+    severityChange,
+    prefs,
+    toasts,
+    toast,
+    dismissToast,
+    setReviewed,
+    reviewWithUndo,
+    reportOrders,
+    orderReport,
+    newOrder,
+    cart,
+    cartOpen,
+    cartJustAdded,
+    openCart,
+    closeCart,
+    addToCart,
+    removeFromCart,
+    setCartPkyb,
+  ]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

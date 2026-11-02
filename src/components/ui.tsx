@@ -24,6 +24,9 @@ const fmt = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", y
 const fmtLong = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric" });
 export const formatDate = (d: string) => fmt.format(new Date(d + "T00:00:00"));
 export const formatDateLong = (d: string) => fmtLong.format(new Date(d + "T00:00:00"));
+/** Portal2's notification date: day/Mon/year, as in 29/Oct/2026. */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const formatNoticeDate = (d: string) => `${d.slice(8, 10)}/${MONTHS[Number(d.slice(5, 7)) - 1]}/${d.slice(0, 4)}`;
 export const nf = new Intl.NumberFormat("en-GB");
 
 export const CATEGORY_ICON: Record<Category, LucideIcon> = {
