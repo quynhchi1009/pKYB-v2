@@ -97,6 +97,8 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
   }, [m, severity]);
 
   const active = m.status === "active";
+  // An active monitor with nothing detected yet (a new order before its first hit) keeps the full layout, with an empty grid and an empty log.
+  const empty = m.events.length === 0;
   const yearEvents = m.events.filter((e) => e.date >= yearAgo);
   const yearDays = new Set(yearEvents.map((e) => e.date)).size;
 
@@ -135,6 +137,15 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
       : m.status === "stopped"
         ? [["Stopped", formatDate(m.endedAt ?? m.lastChecked)]]
         : [["Status", "Setup failed"]];
+
+  const logHead = (
+    <thead className="border-b border-border-subtle bg-background-subtle text-[12px] text-content-primary">
+      <tr>
+        <th className="w-[140px] px-5 py-2.5 font-semibold">Detected</th>
+        <th className="px-3 pr-5 py-2.5 font-semibold">Change by severity</th>
+      </tr>
+    </thead>
+  );
 
   const yearSummary = yearEvents.length
     ? `${plural(yearEvents.length, "change", "changes")} on ${plural(yearDays, "day", "days")} · latest ${formatDate(yearEvents[0].date)}`
@@ -215,27 +226,8 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
         </aside>
 
         <div className="flex min-w-0 flex-col gap-8 px-4 py-5 lg:px-6">
-          {m.events.length === 0 ? (
-            active ? (
-              <section aria-labelledby="idle-h" className="rounded-[6px] border border-border-accent bg-interactive-accent/60 p-5 lg:p-6">
-                <div className="flex items-center gap-2 text-interactive-control">
-                  {baselineReady ? <Eye className="size-5" aria-hidden /> : <LoaderCircle className="size-5 animate-spin" aria-hidden />}
-                  <h2 id="idle-h" className="text-[18px] font-semibold">
-                    {baselineReady ? "Monitoring is running" : "Setting up your baseline"}
-                  </h2>
-                </div>
-                <p className="mt-2 max-w-[64ch] text-[14px] text-content-main">
-                  {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."} Checks run automatically, and you'll be alerted in-app and by email
-                  based on your settings in{" "}
-                  <button onClick={() => openSettings("notifications")} className="font-semibold text-content-link hover:underline">
-                    Severity & alerts
-                  </button>
-                  . New changes will be listed here.
-                </p>
-              </section>
-            ) : (
-              <p className="py-10 text-center text-[13px] text-content-main">No changes were recorded for this company.</p>
-            )
+          {empty && !active ? (
+            <p className="py-10 text-center text-[13px] text-content-main">No changes were recorded for this company.</p>
           ) : (
             <>
               {/* The year at a glance leads the content column: when things changed, and how badly, before any row of the log. */}
@@ -275,7 +267,7 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                     }}
                   />
                 </div>
-                <p className="mt-1.5 text-[12px] text-content-tertiary">Select a day to see its changes in the log.</p>
+                {!empty && <p className="mt-1.5 text-[12px] text-content-tertiary">Select a day to see its changes in the log.</p>}
               </section>
 
               <section id="change-log" aria-labelledby="log-h" className="min-w-0 scroll-mt-24">
@@ -284,7 +276,7 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                     <h2 id="log-h" className="text-[18px] leading-snug font-semibold">
                       Change log <span className="font-normal text-content-tertiary tnum">({nf.format(log.length)})</span>
                     </h2>
-                    {day ? (
+                    {empty ? null : day ? (
                       <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border-accent bg-interactive-accent pr-1 pl-3 text-[12px] font-semibold text-interactive-control">
                         {formatDateLong(day)}
                         <button aria-label="Show the date filter again" onClick={() => setDay(null)} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
@@ -311,7 +303,25 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                   </div>
                 </div>
                 <div className="overflow-hidden rounded-[6px] border border-border-subtle bg-white">
-                  {log.length === 0 ? (
+                  {empty ? (
+                    <>
+                      <table className="w-full text-left text-[13px] max-md:hidden">{logHead}</table>
+                      <div className="px-5 py-12 text-center">
+                        <div className="flex items-center justify-center gap-2 text-interactive-control">
+                          {baselineReady ? <Eye className="size-5" aria-hidden /> : <LoaderCircle className="size-5 animate-spin" aria-hidden />}
+                          <h3 className="text-[16px] font-semibold">{baselineReady ? "Monitoring is running" : "Setting up your baseline"}</h3>
+                        </div>
+                        <p className="mx-auto mt-2 max-w-[64ch] text-[13px] text-content-main">
+                          {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."} Checks run automatically, and you'll be alerted in-app and by
+                          email based on your settings in{" "}
+                          <button onClick={() => openSettings("notifications")} className="font-semibold text-content-link hover:underline">
+                            Severity & alerts
+                          </button>
+                          . New changes will be listed here.
+                        </p>
+                      </div>
+                    </>
+                  ) : log.length === 0 ? (
                     <div className="px-5 py-12 text-center">
                       <p className="text-[14px] font-semibold">No changes in this period</p>
                       <p className="mt-1 text-[13px] text-content-main">
@@ -337,12 +347,7 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                       </ul>
                       <div className="overflow-x-auto max-md:hidden">
                         <table className="w-full min-w-[520px] text-left text-[13px]">
-                          <thead className="border-b border-border-subtle bg-background-subtle text-[12px] text-content-primary">
-                            <tr>
-                              <th className="w-[140px] px-5 py-2.5 font-semibold">Detected</th>
-                              <th className="px-3 pr-5 py-2.5 font-semibold">Change by severity</th>
-                            </tr>
-                          </thead>
+                          {logHead}
                           <tbody className="divide-y divide-border-subtle">
                             {log.slice(page * LOG_PAGE, (page + 1) * LOG_PAGE).map((e) => (
                               <tr key={e.id} className={cx(day === e.date && "bg-interactive-selected")}>
