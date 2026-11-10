@@ -125,27 +125,32 @@ export function EventSeverity({ event, size = "md" }: { event: ChangeEvent; size
 
 /** `tinted` carries severity in the chip's own colour, so a dense table needs no separate severity pill. */
 export function CategoryChip({ category, showSeverity = true, tinted = false }: { category: Category; showSeverity?: boolean; tinted?: boolean }) {
-  const { severity } = useStore();
+  const { severity, simple } = useStore();
   const Icon = CATEGORY_ICON[category];
   const sev = severity[category];
+  // Without severity the chip is one yellow style that only says "this changed", so it never names a severity.
+  const withSeverity = showSeverity && !simple;
   if (tinted) {
     const s = SEV_STYLE[sev];
     return (
-      <span className={cx("inline-flex h-6 items-center gap-1.5 rounded-[4px] border px-2 text-[12px] font-semibold", s.bg, s.line, s.text)} title={`${CATEGORY_LABEL[category]} · ${SEVERITY_LABEL[sev]} severity`}>
+      <span
+        className={cx("inline-flex h-6 items-center gap-1.5 rounded-[4px] border px-2 text-[12px] font-semibold", s.bg, s.line, s.text)}
+        title={simple ? CATEGORY_LABEL[category] : `${CATEGORY_LABEL[category]} · ${SEVERITY_LABEL[sev]} severity`}
+      >
         <Icon className="size-3.5" strokeWidth={2} aria-hidden />
         {CATEGORY_LABEL[category]}
-        <span className="sr-only">, {SEVERITY_LABEL[sev]} severity</span>
+        {!simple && <span className="sr-only">, {SEVERITY_LABEL[sev]} severity</span>}
       </span>
     );
   }
   return (
     <span
-      className={cx("inline-flex h-6 items-center gap-1.5 rounded-[4px] border border-border-subtle px-2 text-[12px] text-content-main", showSeverity ? "bg-white" : "bg-background-subtle")}
-      title={showSeverity ? `${CATEGORY_LABEL[category]} · ${SEVERITY_LABEL[sev]} severity` : undefined}
+      className={cx("inline-flex h-6 items-center gap-1.5 rounded-[4px] border border-border-subtle px-2 text-[12px] text-content-main", withSeverity ? "bg-white" : "bg-background-subtle")}
+      title={withSeverity ? `${CATEGORY_LABEL[category]} · ${SEVERITY_LABEL[sev]} severity` : undefined}
     >
-      <Icon className={cx("size-3.5", showSeverity ? "text-interactive-primary" : "text-content-tertiary")} strokeWidth={2} aria-hidden />
+      <Icon className={cx("size-3.5", withSeverity ? "text-interactive-primary" : "text-content-tertiary")} strokeWidth={2} aria-hidden />
       {CATEGORY_LABEL[category]}
-      {showSeverity && (
+      {withSeverity && (
         <>
           <span className={cx("size-1.5 rounded-full", SEV_STYLE[sev].dot)} aria-hidden />
           <span className="sr-only">, {SEVERITY_LABEL[sev]} severity</span>

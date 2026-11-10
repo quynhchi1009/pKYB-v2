@@ -28,9 +28,10 @@ export function PkybInfoDialog({
   onAdd: () => void;
   onClose: () => void;
 }) {
-  const { severity } = useStore();
+  const { severity, simple } = useStore();
   const openSettings = useOpenSettings();
   const customised = CATEGORIES.some((c) => severity[c] !== DEFAULT_SEVERITY[c]);
+  const steps = STEPS.map((s) => (simple && s.when === "On change" ? { ...s, what: "In-app notifications and a weekly email digest" } : s));
 
   return (
     <Dialog
@@ -68,7 +69,7 @@ export function PkybInfoDialog({
       </p>
 
       <ol aria-label="How it works" className="mt-5 grid gap-3 sm:grid-cols-3">
-        {STEPS.map((s) => (
+        {steps.map((s) => (
           <li key={s.when} className="rounded-[6px] bg-background-accent px-3.5 py-3">
             <s.icon className="size-5 text-interactive-primary" strokeWidth={1.75} aria-hidden />
             <p className="mt-2 text-[13px] font-semibold text-content-primary">{s.when}</p>
@@ -96,17 +97,17 @@ export function PkybInfoDialog({
 
       <dl className="mt-6 grid gap-3 border-t border-border-subtle pt-4 text-[13px] sm:grid-cols-2">
         <div>
-          <dt className="text-[12px] font-semibold text-content-main">Severity</dt>
+          <dt className="text-[12px] font-semibold text-content-main">{simple ? "Notifications" : "Severity"}</dt>
           <dd className="mt-0.5 text-content-primary">
-            {customised ? "Your team's settings apply. " : "Every category starts at Medium. "}
+            {simple ? "Every change is marked in yellow. " : customised ? "Your team's settings apply. " : "Every category starts at Medium. "}
             <button
               onClick={() => {
                 onClose();
-                openSettings("severity");
+                openSettings(simple ? "notifications" : "severity");
               }}
               className="font-semibold text-content-link hover:underline"
             >
-              Severity & alerts
+              {simple ? "Notifications" : "Severity & alerts"}
             </button>
           </dd>
         </div>

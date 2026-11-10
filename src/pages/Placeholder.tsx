@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
+import { useStore } from "../state/store";
 
 export function Placeholder() {
+  const { simple } = useStore();
   return (
     <div className="mx-auto max-w-[640px] px-4 py-24 text-center">
       <p className="text-[16px] font-semibold">This Portal page isn't part of the pKYB prototype</p>
-      <p className="mt-1 text-[14px] text-content-main">The flow covers Search, Choose report, Monitoring and Severity & alerts.</p>
+      <p className="mt-1 text-[14px] text-content-main">The flow covers Search, Choose report, Monitoring and {simple ? "Notifications" : "Severity & alerts"}.</p>
       <Link to="/pkyb/monitoring" className="mt-4 inline-block font-semibold text-content-link hover:underline">
         Go to Monitoring
       </Link>

@@ -20,7 +20,7 @@ import {
   Tag,
   X,
 } from "lucide-react";
-import { useStore } from "../state/store";
+import { useStore, type Scope } from "../state/store";
 import { CATEGORY_LABEL, RECENT_DAYS, SEVERITY_LABEL, SEVERITY_RANK, isRecent, worstSeverity } from "../data/model";
 import { NewTag, SEV_STYLE, Toasts, cx, formatNoticeDate } from "./ui";
 import { SettingsHost } from "./SettingsPanel";
@@ -55,7 +55,7 @@ const joinNames = (names: string[]) => (names.length < 2 ? names.join("") : `${n
 
 /** Portal2's notifications popover: Refresh and Clear all in the header, a list of icon rows, dismissed one by one. */
 function NotificationBell() {
-  const { monitors, severity, prefs } = useStore();
+  const { monitors, severity, prefs, simple, simplePrefs } = useStore();
   const [open, setOpen] = useState(false);
   const [cleared, setCleared] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,12 +67,13 @@ function NotificationBell() {
       for (const e of m.events) {
         if (!isRecent(e)) continue;
         const sev = worstSeverity(e.categories, severity);
-        if (!prefs.inApp[sev]) continue;
+        // Without severity there is one switch for in-app notifications; with it, one per severity.
+        if (simple ? !simplePrefs.inApp : !prefs.inApp[sev]) continue;
         out.push({ id: e.id, monitorId: m.id, name: m.name, date: e.date, sev, changed: joinNames(e.categories.map((c) => CATEGORY_LABEL[c])) });
       }
     }
     return out.sort((a, b) => (a.date === b.date ? SEVERITY_RANK[b.sev] - SEVERITY_RANK[a.sev] : a.date < b.date ? 1 : -1));
-  }, [monitors, severity, prefs]);
+  }, [monitors, severity, prefs, simple, simplePrefs]);
   // Clearing empties the bell, not the change feed: the changes themselves stay on record.
   const items = all.filter((n) => !cleared.includes(n.id));
 
@@ -143,7 +144,11 @@ function NotificationBell() {
                   <li className="px-3 py-8 text-center text-[13px] text-content-main">
                     {cleared.length > 0
                       ? "You're all caught up. Cleared alerts stay in the change feed."
-                      : `No alerts in the last ${RECENT_DAYS} days at the severities you chose in Severity & alerts.`}
+                      : simple
+                        ? simplePrefs.inApp
+                          ? `No changes recorded in the last ${RECENT_DAYS} days.`
+                          : "In-app notifications are off. Turn them on in Notifications settings."
+                        : `No alerts in the last ${RECENT_DAYS} days at the severities you chose in Severity & alerts.`}
                   </li>
                 )}
                 {items.slice(0, 12).map((n) => {
@@ -156,14 +161,26 @@ function NotificationBell() {
                         onClick={() => setOpen(false)}
                         className="flex gap-3 rounded-[8px] px-3 py-3 pr-10 transition-colors hover:bg-background-subtle focus-visible:bg-background-subtle"
                       >
-                        <kind.icon className="size-7 shrink-0 text-content-primary" strokeWidth={1.5} aria-hidden />
+                        {simple ? (
+                          // Every change wears the same yellow, so the icon carries it instead of a severity word.
+                          <span className={cx("grid size-8 shrink-0 place-items-center rounded-full border", SEV_STYLE.medium.bg, SEV_STYLE.medium.line, SEV_STYLE.medium.text)}>
+                            <kind.icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
+                          </span>
+                        ) : (
+                          <kind.icon className="size-7 shrink-0 text-content-primary" strokeWidth={1.5} aria-hidden />
+                        )}
                         <span className="min-w-0 flex-1 text-[13px] leading-snug">
                           <span className="block font-bold text-interactive-primary">
-                            {kind.title} -{" "}
-                            <span className={cx("uppercase", SEV_STYLE[n.sev].text)}>
-                              {SEVERITY_LABEL[n.sev]}
-                              <span className="sr-only"> severity</span>
-                            </span>
+                            {kind.title}
+                            {!simple && (
+                              <>
+                                {" "}-{" "}
+                                <span className={cx("uppercase", SEV_STYLE[n.sev].text)}>
+                                  {SEVERITY_LABEL[n.sev]}
+                                  <span className="sr-only"> severity</span>
+                                </span>
+                              </>
+                            )}
                           </span>
                           <span className="mt-0.5 block font-semibold text-content-primary">{n.name}</span>
                           <span className="mt-1.5 block text-[12px] text-content-main">{n.changed} changed. Click here to view the change.</span>
@@ -274,6 +291,55 @@ function Sidebar({ collapsed, onCollapse, onNavigate }: { collapsed: boolean; on
   );
 }
 
+const SCOPES: Array<{ value: Scope; label: string; short: string }> = [
+  { value: "current", label: "Current", short: "Current" },
+  { value: "simple", label: "Without severity & alerts", short: "No severity" },
+];
+
+/** A prototype control, not product UI: it flips the whole prototype between the current scope and the one without severity and alerts. */
+function ScopeSwitch() {
+  const { scope, setScope } = useStore();
+  const onKey = (e: React.KeyboardEvent) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+    e.preventDefault();
+    const next: Scope = scope === "current" ? "simple" : "current";
+    setScope(next);
+    document.getElementById(`scope-${next}`)?.focus();
+  };
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Prototype version"
+      onKeyDown={onKey}
+      className="fixed bottom-4 left-1/2 z-[55] flex -translate-x-1/2 items-center gap-2 rounded-full bg-portal-sidebar p-1 pl-4 text-white shadow-dialog max-sm:pl-1"
+    >
+      <span aria-hidden className="text-[11px] font-semibold tracking-[0.06em] text-chrome-content-main uppercase max-sm:hidden">
+        Version
+      </span>
+      {SCOPES.map((s) => {
+        const on = scope === s.value;
+        return (
+          <button
+            key={s.value}
+            id={`scope-${s.value}`}
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            onClick={() => setScope(s.value)}
+            className={cx(
+              "h-8 rounded-full px-3.5 text-[13px] font-semibold whitespace-nowrap transition-colors",
+              on ? "bg-white text-content-primary" : "text-white hover:bg-chrome-control-hover",
+            )}
+          >
+            <span className="max-sm:hidden">{s.label}</span>
+            <span className="sm:hidden">{s.short}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* Portal2 layout: a full-height charcoal sidebar carries the logo; the white top bar sits beside it,
    holding the page title in capitals and the bell and cart. */
 export function AppShell({ children }: { children: ReactNode }) {
@@ -344,6 +410,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SettingsHost />
       <CartDrawer />
       <AnnouncementHost />
+      <ScopeSwitch />
     </div>
   );
 }

@@ -43,8 +43,11 @@ const PAGE = 25;
 const SEV_ICON: Record<Severity, LucideIcon> = { high: TriangleAlert, medium: CircleAlert, low: Info };
 const asCompany = (m: Monitor): Company => ({ id: m.id, name: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, status: "Registered" });
 
+/** In the version without severity, a severity filter in the URL means "has a change" and the only sort is by date. */
+const normalise = (f: Filters, simple: boolean): Filters => (simple ? { ...f, sev: f.sev === "all" ? "all" : "medium", sort: "date" } : f);
+
 export function Monitoring() {
-  const { monitors, severity } = useStore();
+  const { monitors, severity, simple } = useStore();
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as Tab) || "active";
   // Filters live in the URL so Back from a company page returns to the same view.
@@ -77,7 +80,8 @@ export function Monitoring() {
     return { by };
   }, [rows]);
 
-  const f = filtersFromParams(params);
+  // Without severity there is one "changed" filter and one sort order, whatever an older link asked for.
+  const f = normalise(filtersFromParams(params), simple);
   const onTabKey = (e: React.KeyboardEvent) => {
     const i = TABS.findIndex(([t]) => t === tab);
     const to = e.key === "ArrowRight" ? (i + 1) % TABS.length : e.key === "ArrowLeft" ? (i + TABS.length - 1) % TABS.length : e.key === "Home" ? 0 : e.key === "End" ? TABS.length - 1 : -1;
@@ -131,20 +135,29 @@ export function Monitoring() {
 
       {/* Portfolio summary. The per-day heatmap lives on each company page; across hundreds of monitors it only adds noise. */}
       <section aria-label="Portfolio summary" className="@container mt-6">
-        <div role="group" aria-label={`Filter active monitors. Severity counts are companies by their most severe change in the last ${RECENT_DAYS} days.`} className="grid grid-cols-2 gap-3 @4xl:grid-cols-4 @4xl:gap-4">
+        <div
+          role="group"
+          aria-label={
+            simple
+              ? `Filter active monitors. Changes detected counts companies with at least one change in the last ${RECENT_DAYS} days.`
+              : `Filter active monitors. Severity counts are companies by their most severe change in the last ${RECENT_DAYS} days.`
+          }
+          className="grid grid-cols-2 gap-3 @4xl:grid-cols-4 @4xl:gap-4"
+        >
           <StatCard
             value={active.length}
             label="Total monitored"
             icon={Building2}
             onClick={() => update({ tab: null, sev: null })}
           />
-          {(["high", "medium", "low"] as Severity[]).map((s) => {
+          {/* Without severity there is one card for "something changed", in the amber that stands in for every change. */}
+          {(simple ? (["medium"] as Severity[]) : (["high", "medium", "low"] as Severity[])).map((s) => {
             const pressed = tab === "active" && f.sev === s;
             return (
               <StatCard
                 key={s}
                 value={triage.by[s]}
-                label={`${SEVERITY_LABEL[s]} severity`}
+                label={simple ? "Changes detected" : `${SEVERITY_LABEL[s]} severity`}
                 icon={SEV_ICON[s]}
                 severity={s}
                 pressed={pressed}
@@ -153,7 +166,11 @@ export function Monitoring() {
             );
           })}
         </div>
-        <p className="mt-2 text-[12px] text-content-tertiary">Severity counts are companies, by their most severe change in the last {RECENT_DAYS} days. Select a card to filter the table.</p>
+        <p className="mt-2 text-[12px] text-content-tertiary">
+          {simple
+            ? `Companies with at least one change in the last ${RECENT_DAYS} days. Select the card to filter the table.`
+            : `Severity counts are companies, by their most severe change in the last ${RECENT_DAYS} days. Select a card to filter the table.`}
+        </p>
       </section>
 
       <div className="mt-8 border-b border-border-subtle">
@@ -311,7 +328,7 @@ function ActiveTable({ rows, f: params, update, page }: { rows: Row[]; f: Filter
   // Change feed, so they're ignored here; a severity card always means "most severe change in the last 30 days".
   const f: Filters = { ...params, cat: "all", recent: params.sev !== "all" };
   const { q, jur, sev, cat, recent: onlyRecent, sort } = f;
-  const { severity } = useStore();
+  const { severity, simple } = useStore();
   const setPage = (n: number) => update({ page: n ? String(n) : null });
   const setSort = (v: "severity" | "date") => update({ sort: v === "severity" ? null : v });
 
@@ -439,7 +456,11 @@ function ActiveTable({ rows, f: params, update, page }: { rows: Row[]; f: Filter
                 </th>
                 <th className="px-3 py-2.5 font-semibold">Company</th>
                 <th className="px-3 py-2.5 font-semibold">Jurisdiction</th>
-                <SortTh label="Change by severity" active={sort === "severity"} title="Sort by severity, most severe first" onClick={() => setSort("severity")} />
+                {simple ? (
+                  <th className="px-3 py-2.5 font-semibold">Change</th>
+                ) : (
+                  <SortTh label="Change by severity" active={sort === "severity"} title="Sort by severity, most severe first" onClick={() => setSort("severity")} />
+                )}
                 <SortTh label="Detected" active={sort === "date"} title="Sort by date detected, newest first" onClick={() => setSort("date")} />
                 <th className="w-[112px] py-2.5 pr-4" />
               </tr>
@@ -497,7 +518,7 @@ function ActiveTable({ rows, f: params, update, page }: { rows: Row[]; f: Filter
                 <tr>
                   <td colSpan={6} className="px-4 py-14 text-center">
                     <p className="text-[14px] font-semibold">No monitors match these filters</p>
-                    <p className="mt-1 text-[13px] text-content-main">Try another jurisdiction or severity, or clear filters to see all {nf.format(rows.length)} active monitors.</p>
+                    <p className="mt-1 text-[13px] text-content-main">{simple ? "Try another jurisdiction" : "Try another jurisdiction or severity"}, or clear filters to see all {nf.format(rows.length)} active monitors.</p>
                   </td>
                 </tr>
               )}
@@ -535,14 +556,14 @@ function SortTh({ label, active, title, onClick }: { label: string; active: bool
 }
 
 function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchParams; update: Update }) {
-  const { severity, prefs } = useStore();
+  const { severity, prefs, simple, simplePrefs } = useStore();
   const navigate = useNavigate();
-  const { q, jur, sev, cat } = filtersFromParams(params);
+  const { q, jur, sev, cat } = normalise(filtersFromParams(params), simple);
   const range = (params.get("range") as DateRange | null) ?? "all";
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
-  const sort = params.get("fsort") === "severity" ? "severity" : "date";
-  /** Only recent changes at the severities the analyst gets in-app alerts for: exactly what the bell counts. */
+  const sort = !simple && params.get("fsort") === "severity" ? "severity" : "date";
+  /** Only recent changes the analyst gets in-app alerts for (at the severities they chose, or all when severity is off): exactly what the bell counts. */
   const alertsOnly = params.get("alerts") === "1";
   const page = Number(params.get("page") ?? 0);
   const setPage = (n: number) => update({ page: n ? String(n) : null });
@@ -562,7 +583,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
         if ((lo && e.date < lo) || (hi && e.date > hi)) continue;
         if (cat !== "all" && !e.categories.includes(cat as Category)) continue;
         const s = worstSeverity(e.categories, severity);
-        if (alertsOnly && !prefs.inApp[s]) continue;
+        if (alertsOnly && (simple ? !simplePrefs.inApp : !prefs.inApp[s])) continue;
         if (sev !== "all" && s !== sev) continue;
         out.push({ e, m, s });
       }
@@ -570,7 +591,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
     const byDate = (a: (typeof out)[number], b: (typeof out)[number]) => (a.e.date === b.e.date ? 0 : a.e.date < b.e.date ? 1 : -1);
     const bySev = (a: (typeof out)[number], b: (typeof out)[number]) => SEVERITY_RANK[b.s] - SEVERITY_RANK[a.s];
     return out.sort((a, b) => (sort === "date" ? byDate(a, b) || bySev(a, b) : bySev(a, b) || byDate(a, b)));
-  }, [rows, q, jur, sev, cat, range, from, to, sort, severity, alertsOnly, prefs]);
+  }, [rows, q, jur, sev, cat, range, from, to, sort, severity, alertsOnly, prefs, simple, simplePrefs]);
 
   const open = (id: string) => navigate(`/reports/${id}?tab=pkyb`, { state: { from: "monitoring" } });
   const slice = events.slice(page * PAGE, (page + 1) * PAGE);
@@ -584,7 +605,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
         jur={jur}
         setJur={(v) => update({ jur: v })}
         sev={sev}
-        setSev={(v) => update({ sev: v })}
+        setSev={simple ? undefined : (v) => update({ sev: v })}
         cat={cat}
         setCat={(v) => update({ cat: v })}
       >
@@ -603,7 +624,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
         )}
         {alertsOnly && (
           <span className="inline-flex h-9 items-center gap-2 rounded-full border border-border-accent bg-interactive-accent pr-1.5 pl-3 text-[13px] font-semibold text-interactive-control">
-            Your in-app alerts
+            {simple ? "Your in-app notifications" : "Your in-app alerts"}
             <button aria-label="Show all changes" onClick={() => update({ alerts: null })} className="grid size-6 place-items-center rounded-full hover:bg-interactive-accent-hover">
               <X className="size-3.5" />
             </button>
@@ -644,7 +665,11 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
               <tr>
                 <th className="px-4 py-2.5 font-semibold">Company</th>
                 <th className="px-3 py-2.5 font-semibold">Jurisdiction</th>
-                <SortTh label="Change by severity" active={sort === "severity"} title="Sort by severity, most severe first" onClick={() => update({ fsort: "severity" })} />
+                {simple ? (
+                  <th className="px-3 py-2.5 font-semibold">Change</th>
+                ) : (
+                  <SortTh label="Change by severity" active={sort === "severity"} title="Sort by severity, most severe first" onClick={() => update({ fsort: "severity" })} />
+                )}
                 <SortTh label="Detected" active={sort === "date"} title="Sort by date detected, newest first" onClick={() => update({ fsort: null })} />
                 <th className="w-[112px] py-2.5 pr-4">
                   <span className="sr-only">Actions</span>

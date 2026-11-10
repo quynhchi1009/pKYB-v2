@@ -24,9 +24,10 @@ const STEPS: Array<{ when: string; what: string; icon: typeof Eye }> = [
 export type PkybOrder = { extras: string[]; onConfirm: () => void };
 
 export function CreateMonitorDialog({ company, onClose, order }: { company: Company | null; onClose: () => void; order?: PkybOrder }) {
-  const { createMonitor, toast, monitors } = useStore();
+  const { createMonitor, toast, monitors, simple } = useStore();
   const navigate = useNavigate();
   const loc = useLocation();
+  const steps = STEPS.map((s) => (simple && s.when === "On change" ? { ...s, what: "In-app notifications and a weekly digest" } : s));
   const j = company ? jurisdictionByCode[company.jurisdiction] : null;
   const existing = company ? monitors.find((m) => m.regNo === company.regNo && m.status === "active") : undefined;
   const unsupported = !!company && PKYB_UNSUPPORTED.has(company.jurisdiction);
@@ -114,7 +115,7 @@ export function CreateMonitorDialog({ company, onClose, order }: { company: Comp
             {ordering && (
               <ol aria-label="What happens" className="relative flex flex-col gap-5">
                 <span aria-hidden className="absolute top-4 bottom-4 left-[15px] w-px bg-chrome-border" />
-                {STEPS.map((s) => (
+                {steps.map((s) => (
                   <li key={s.when} className="relative flex gap-3">
                     <span className="grid size-8 shrink-0 place-items-center rounded-full bg-background-system shadow-[inset_0_0_0_1px_rgb(47_191_135/0.55)]">
                       <s.icon className="size-4 text-chrome-accent" strokeWidth={1.75} aria-hidden />
@@ -153,8 +154,10 @@ export function CreateMonitorDialog({ company, onClose, order }: { company: Comp
                         );
                       })}
                     </ul>
-                    {/* Just enough to know severity exists; the mapping itself lives in Severity & alerts. */}
-                    <p className="mt-3 text-[13px] text-content-tertiary italic">Severity can be applied to each of the change categories.</p>
+                    {/* Just enough to know severity exists; the mapping itself lives in Severity & alerts. Without severity, changes are simply marked. */}
+                    <p className="mt-3 text-[13px] text-content-tertiary italic">
+                      {simple ? "Every change is recorded and marked in yellow." : "Severity can be applied to each of the change categories."}
+                    </p>
                   </section>
 
                   <section aria-labelledby="order-h" className="border-t border-dashed border-border-neutral pt-5">

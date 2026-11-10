@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, FilePlus2, LoaderCircle, Eye, SlidersHorizontal, X } from "lucide-react";
+import { Bell, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, FilePlus2, LoaderCircle, Eye, SlidersHorizontal, X } from "lucide-react";
 import { PRICING, STATUS_COPY, SEVERITY_LABEL, SEVERITY_RANK, TODAY, addDays, iso, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
 import { useStore } from "../state/store";
 import { Heatmap } from "../components/Heatmap";
@@ -64,7 +64,7 @@ const plural = (n: number, one: string, many: string) => `${nf.format(n)} ${n ==
 export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline?: () => void }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { severity, toast, reportOrders } = useStore();
+  const { severity, toast, reportOrders, simple } = useStore();
   const openSettings = useOpenSettings();
   const [stopping, setStopping] = useState(false);
   const [creating, setCreating] = useState<Company | null>(null);
@@ -142,7 +142,7 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
     <thead className="border-b border-border-subtle bg-background-subtle text-[12px] text-content-primary">
       <tr>
         <th className="w-[140px] px-5 py-2.5 font-semibold">Detected</th>
-        <th className="px-3 pr-5 py-2.5 font-semibold">Change by severity</th>
+        <th className="px-3 pr-5 py-2.5 font-semibold">{simple ? "Change" : "Change by severity"}</th>
       </tr>
     </thead>
   );
@@ -203,11 +203,12 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                   {day ? plural(log.length, "change", "changes") : `${rangeSpan} · ${plural(ranged.length, "change", "changes")}`}
                 </p>
                 <ul className="mt-3 flex flex-col gap-2.5">
-                  {(["high", "medium", "low"] as Severity[]).map((s) => {
+                  {/* Without severity the rail has one row: every change, in the yellow that marks a change. */}
+                  {(simple ? (["medium"] as Severity[]) : (["high", "medium", "low"] as Severity[])).map((s) => {
                     const total = mixTotal || 1;
                     return (
                       <li key={s} className="grid grid-cols-[64px_minmax(0,1fr)_28px] items-center gap-3 text-[13px]">
-                        <span className={cx("font-medium", SEV_STYLE[s].text)}>{SEVERITY_LABEL[s]}</span>
+                        <span className={cx("font-medium", SEV_STYLE[s].text)}>{simple ? "Changes" : SEVERITY_LABEL[s]}</span>
                         <span className="h-2 overflow-hidden rounded-full bg-background-subtle">
                           <span className="block h-full rounded-full transition-[width] duration-300 ease-out-expo" style={{ width: `${(counts[s] / total) * 100}%`, background: CELL[s] }} />
                         </span>
@@ -216,9 +217,15 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                     );
                   })}
                 </ul>
-                <button onClick={() => openSettings("severity")} className="mt-3 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
-                  <SlidersHorizontal className="size-3.5" /> Adjust severity
-                </button>
+                {simple ? (
+                  <button onClick={() => openSettings("notifications")} className="mt-3 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
+                    <Bell className="size-3.5" /> Notification settings
+                  </button>
+                ) : (
+                  <button onClick={() => openSettings("severity")} className="mt-3 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
+                    <SlidersHorizontal className="size-3.5" /> Adjust severity
+                  </button>
+                )}
               </section>
             )}
             {basics.length > 0 && <BasicHistory reports={basics} baselineReady={baselineReady} onViewBaseline={onViewBaseline} onDownload={downloadReport} />}
@@ -240,10 +247,10 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                     <p className="mt-0.5 text-[13px] text-content-main tnum">{yearSummary}</p>
                   </div>
                   <span className="flex items-center gap-4 text-[12px] text-content-main">
-                    {(["low", "medium", "high"] as Severity[]).map((s) => (
+                    {(simple ? (["medium"] as Severity[]) : (["low", "medium", "high"] as Severity[])).map((s) => (
                       <span key={s} className="flex items-center gap-1.5">
                         <span className="size-3 rounded-[2px]" style={{ background: CELL[s] }} aria-hidden />
-                        {SEVERITY_LABEL[s]}
+                        {simple ? "Change detected" : SEVERITY_LABEL[s]}
                       </span>
                     ))}
                   </span>
@@ -253,14 +260,14 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                     weeks={53}
                     size={12}
                     gap={3}
-                    ariaLabel={`Changes detected for ${m.name} over the last year, coloured by severity. Select a day to filter the change log.`}
+                    ariaLabel={`Changes detected for ${m.name} over the last year${simple ? ", marked in yellow" : ", coloured by severity"}. Select a day to filter the change log.`}
                     selected={day}
                     onSelect={selectDay}
                     cell={(d) => {
                       const c = byDay.get(d);
                       return {
                         fill: CELL[c?.sev ?? "none"],
-                        label: c ? `${c.n} change${c.n > 1 ? "s" : ""} · ${SEVERITY_LABEL[c.sev]} · ${formatDate(d)}` : `No changes · ${formatDate(d)}`,
+                        label: c ? `${c.n} change${c.n > 1 ? "s" : ""} · ${simple ? "" : `${SEVERITY_LABEL[c.sev]} · `}${formatDate(d)}` : `No changes · ${formatDate(d)}`,
                         active: !!c,
                         dim: !day && range !== "all" && !inRange(d),
                       };
@@ -312,10 +319,12 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                           <h3 className="text-[16px] font-semibold">{baselineReady ? "Monitoring is running" : "Setting up your baseline"}</h3>
                         </div>
                         <p className="mx-auto mt-2 max-w-[64ch] text-[13px] text-content-main">
-                          {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."} Checks run automatically, and you'll be alerted in-app and by
-                          email based on your settings in{" "}
+                          {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."}{" "}
+                          {simple
+                            ? "Checks run automatically. Recorded changes can notify you in-app, and a weekly digest email lists them all, based on your settings in"
+                            : "Checks run automatically, and you'll be alerted in-app and by email based on your settings in"}{" "}
                           <button onClick={() => openSettings("notifications")} className="font-semibold text-content-link hover:underline">
-                            Severity & alerts
+                            {simple ? "Notifications" : "Severity & alerts"}
                           </button>
                           . New changes will be listed here.
                         </p>
@@ -390,12 +399,12 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
 
 /** A change's categories, tinted by today's severity mapping. When the mapping has moved since detection, the original stays as a note. */
 function LogChange({ categories, was }: { categories: Monitor["events"][number]["categories"]; was: Severity }) {
-  const { severity } = useStore();
+  const { severity, simple } = useStore();
   const now = worstSeverity(categories, severity);
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <ChangeChips categories={categories} />
-      {was !== now && <span className="text-[11px] whitespace-nowrap text-content-tertiary">Detected as {SEVERITY_LABEL[was]}</span>}
+      {!simple && was !== now &&<span className="text-[11px] whitespace-nowrap text-content-tertiary">Detected as {SEVERITY_LABEL[was]}</span>}
     </span>
   );
 }

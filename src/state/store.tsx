@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  CATEGORIES,
   CURRENT_USER,
   DEMO_ORG_SEVERITY,
   TODAY,
@@ -22,6 +23,31 @@ export type NotifyPrefs = {
   weekly: Record<Severity, boolean>;
   daily: Record<Severity, boolean>;
 };
+
+/**
+ * Which version of the product the prototype shows. "current" has High / Medium / Low severity and alerts picked per
+ * severity. "simple" is the scope check without them: one kind of change, every recorded change can notify in-app, and
+ * one weekly email digest. A switch in the shell flips between the two.
+ */
+export type Scope = "current" | "simple";
+const SCOPE_KEY = "pkyb.scope";
+function initialScope(): Scope {
+  try {
+    // `?scope=simple` opens the prototype in that version, so a link can point at either one.
+    const q = new URLSearchParams(window.location.search).get("scope");
+    if (q === "simple" || q === "current") return q;
+    const saved = window.localStorage.getItem(SCOPE_KEY);
+    if (saved === "simple" || saved === "current") return saved;
+  } catch {
+    // Storage can be blocked; the prototype still works, it just forgets the choice.
+  }
+  return "current";
+}
+/** With no severity, every change reads the same. Medium is the amber tier, so it stands in as the one "change" colour. */
+const FLAT_SEVERITY = Object.fromEntries(CATEGORIES.map((c) => [c, "medium"])) as SeverityMap;
+
+/** What the simple version asks the team for: two switches, both on until someone turns them off. */
+export type SimplePrefs = { inApp: boolean; weeklyDigest: boolean };
 
 
 /** Who changed the org-wide severity mapping last, and what they changed. */
@@ -50,7 +76,14 @@ type Store = {
    * lists, counts, alerts and "already monitored" checks all use `monitors`.
    */
   groupMonitors: Monitor[];
-  /** The saved mapping every view colours by. */
+  /** Which version of the product is showing, and a switch for it. */
+  scope: Scope;
+  setScope: (s: Scope) => void;
+  /** True in the version without severity and severity-based alerts. */
+  simple: boolean;
+  simplePrefs: SimplePrefs;
+  saveSimplePrefs: (p: SimplePrefs) => void;
+  /** The saved mapping every view colours by. In the simple version every category reads as Medium, whatever the team saved. */
   severity: SeverityMap;
   /** Replaces the whole mapping and records who changed it, so the page can show attribution. */
   saveSeverity: (map: SeverityMap, summary: string) => void;
@@ -90,7 +123,19 @@ const Ctx = createContext<Store | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [monitors, setMonitors] = useState<Monitor[]>(() => generateMonitors());
   const [reportOrders, setReportOrders] = useState<ReportOrder[]>(() => generateReportOrders(monitors));
-  const [severity, setSeverityMap] = useState<SeverityMap>(DEMO_ORG_SEVERITY);
+  const [severityMap, setSeverityMap] = useState<SeverityMap>(DEMO_ORG_SEVERITY);
+  const [scope, setScopeState] = useState<Scope>(initialScope);
+  const [simplePrefs, setSimplePrefs] = useState<SimplePrefs>({ inApp: true, weeklyDigest: true });
+  const setScope = useCallback((s: Scope) => {
+    setScopeState(s);
+    try {
+      window.localStorage.setItem(SCOPE_KEY, s);
+    } catch {
+      // See initialScope.
+    }
+  }, []);
+  const simple = scope === "simple";
+  const severity = simple ? FLAT_SEVERITY : severityMap;
   const [severityChange, setSeverityChange] = useState<SeverityChange | null>(null);
   const [prefs, setPrefs] = useState<NotifyPrefs>({
     inApp: { low: false, medium: true, high: true },
@@ -232,6 +277,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return {
       monitors: ownMonitors,
       groupMonitors: monitors,
+      scope,
+      setScope,
+      simple,
+      simplePrefs,
+      saveSimplePrefs: setSimplePrefs,
       severity,
       saveSeverity: (map, summary) => {
         setSeverityMap(map);
@@ -279,6 +329,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [
     monitors,
     ownMonitors,
+    scope,
+    setScope,
+    simple,
+    simplePrefs,
     severity,
     severityChange,
     prefs,
