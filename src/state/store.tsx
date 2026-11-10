@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  CURRENT_USER,
   DEMO_ORG_SEVERITY,
   TODAY,
   iso,
@@ -42,7 +43,13 @@ export type CartItem = {
 };
 
 type Store = {
+  /** The signed-in user's own pKYB monitors. A teammate's monitor on the same company is a separate monitor and never appears here. */
   monitors: Monitor[];
+  /**
+   * Every monitor in the enterprise group, teammates' included. Only for reading a report's baseline link:
+   * lists, counts, alerts and "already monitored" checks all use `monitors`.
+   */
+  groupMonitors: Monitor[];
   /** The saved mapping every view colours by. */
   severity: SeverityMap;
   /** Replaces the whole mapping and records who changed it, so the page can show attribution. */
@@ -147,7 +154,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       localName: c.localName,
       regNo: c.regNo,
       jurisdiction: c.jurisdiction,
-      user: "Me",
+      user: CURRENT_USER,
       type,
       status: "processing",
       aml: false,
@@ -196,9 +203,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
   const setCartPkyb = useCallback((id: string, on: boolean) => setCart((all) => all.map((x) => (x.id === id ? { ...x, pkyb: on } : x))), []);
 
+  // A monitor belongs to whoever ordered its baseline report.
+  const ownMonitors = useMemo(() => {
+    const theirs = new Set(reportOrders.filter((o) => o.monitorId && o.user !== CURRENT_USER).map((o) => o.monitorId));
+    return monitors.filter((m) => !theirs.has(m.id));
+  }, [monitors, reportOrders]);
+
   const value = useMemo<Store>(() => {
     const createMonitor = (c: Company): Monitor => {
-      const existing = monitors.find((m) => m.regNo === c.regNo && m.status === "active");
+      const existing = ownMonitors.find((m) => m.regNo === c.regNo && m.status === "active");
       if (existing) return existing;
       const m: Monitor = {
         id: `new-${c.id}`,
@@ -217,7 +230,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return m;
     };
     return {
-      monitors,
+      monitors: ownMonitors,
+      groupMonitors: monitors,
       severity,
       saveSeverity: (map, summary) => {
         setSeverityMap(map);
@@ -230,7 +244,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       checkout: () => {
         let started = 0;
         for (const item of cart) {
-          const watched = monitors.some((m) => m.regNo === item.company.regNo && m.status === "active");
+          const watched = ownMonitors.some((m) => m.regNo === item.company.regNo && m.status === "active");
           if (item.pkyb && !watched) {
             createMonitor(item.company);
             started++;
@@ -264,6 +278,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [
     monitors,
+    ownMonitors,
     severity,
     severityChange,
     prefs,

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, BadgeCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronsLeft, ChevronsRight, CircleHelp, Download, Eye, FilePlus2, ScanSearch, Share2, type LucideIcon } from "lucide-react";
-import { PKYB_UNSUPPORTED, REPORT_TYPE_LABEL, STATUS_COPY, jurisdictionByCode, reportFacts, type Company, type Monitor, type ReportFacts, type ReportOrder } from "../data/model";
+import { CURRENT_USER, NOT_OWN_MONITOR, NOT_OWN_REPORT, PKYB_UNSUPPORTED, REPORT_TYPE_LABEL, STATUS_COPY, isOwnMonitor, isOwnReport, jurisdictionByCode, reportFacts, type Company, type Monitor, type ReportFacts, type ReportOrder } from "../data/model";
 import { useStore } from "../state/store";
-import { Button, Flag, cx, formatDate, nf } from "../components/ui";
+import { Button, Flag, Hint, cx, formatDate, nf } from "../components/ui";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 import { MonitorPanel } from "./MonitorPanel";
 
@@ -48,9 +48,10 @@ const pageOf = (id: string) => SECTIONS.find((s) => s.id === id || s.children?.s
  */
 export function ViewReport() {
   const { id } = useParams();
-  const { monitors, reportOrders } = useStore();
+  const { monitors, groupMonitors, reportOrders } = useStore();
   const byOrder = reportOrders.find((o) => o.id === id);
-  const monitor = monitors.find((x) => x.id === (byOrder?.monitorId ?? id));
+  // A report's own baseline monitor is looked up in the whole group, so a teammate's baseline still shows its tab as unavailable.
+  const monitor = groupMonitors.find((x) => x.id === (byOrder?.monitorId ?? id));
   const order: ReportOrder | undefined =
     byOrder ??
     reportOrders.find((o) => o.monitorId === id) ??
@@ -63,7 +64,7 @@ export function ViewReport() {
           localName: monitor.localName,
           regNo: monitor.regNo,
           jurisdiction: monitor.jurisdiction,
-          user: "Me",
+          user: CURRENT_USER,
           type: "basic",
           status: "completed",
           aml: false,
@@ -103,7 +104,8 @@ export function ViewReport() {
     jurisdiction: order.jurisdiction,
     createdAt: order.createdAt.slice(0, 10),
   };
-  // The company's monitor: the one this report is the baseline of, or any running monitor on the same registration.
+  // The company's monitor: the one this report is the baseline of, or any of the user's own running monitors on the same registration.
+  // A teammate's monitor on the same company is separate and never stands in for it.
   const linked = (order.monitorId && monitor) || monitors.find((x) => x.regNo === order.regNo && x.status === "active");
   return <Report m={subject} order={order} monitor={linked || undefined} />;
 }
@@ -118,7 +120,9 @@ type ViewTab = "en" | "og" | "pkyb";
 
 /** `order` is absent only for a monitor whose setup failed: the page then holds just the pKYB tab. */
 function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monitor?: Monitor }) {
-  const { toast } = useStore();
+  const { toast, reportOrders } = useStore();
+  // A teammate's monitor shows as an unavailable tab: it can't be opened here, by click, arrow key or `?tab=pkyb`.
+  const ownMonitor = !monitor || isOwnMonitor(monitor.id, reportOrders);
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const fromMonitoring = (location.state as { from?: string } | null)?.from === "monitoring";
@@ -127,10 +131,11 @@ function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monito
   const [active, setActive] = useState("cover");
   const [companyOpen, setCompanyOpen] = useState(true);
   const [lang, setLang] = useState<"en" | "og">("en");
-  const onPkyb = !!monitor && (!order || params.get("tab") === "pkyb");
+  const onPkyb = !!monitor && ownMonitor && (!order || params.get("tab") === "pkyb");
   const tab: ViewTab = onPkyb ? "pkyb" : lang;
   // Switching tabs rewrites the query in place: the tab is shareable, but Back still leaves the page.
   const pickTab = (next: ViewTab) => {
+    if (next === "pkyb" && !ownMonitor) return;
     const q = new URLSearchParams(params);
     if (next === "pkyb") q.set("tab", "pkyb");
     else {
@@ -197,6 +202,8 @@ function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monito
   const { createMonitor } = useStore();
   const navigate = useNavigate();
   const canCreate = !monitoring && !PKYB_UNSUPPORTED.has(m.jurisdiction);
+  // Only the user who generated the report can start pKYB from it; for a teammate's report the button is shown unavailable.
+  const ownReport = !order || isOwnReport(order);
   const asCompany: Company = { id: m.id, name: m.name, localName: m.localName, regNo: m.regNo, jurisdiction: m.jurisdiction, status: "Registered" };
   const startMonitor = () => {
     const created = createMonitor(asCompany);
@@ -207,7 +214,9 @@ function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monito
   const tabKeys = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
     const tabOrder: ViewTab[] = [...(order ? (["en", "og"] as ViewTab[]) : []), ...(monitor ? (["pkyb"] as ViewTab[]) : [])];
-    const i = tabOrder.indexOf(tab);
+    // Count from the focused tab, not the selected one: an unavailable pKYB tab takes focus without being selected.
+    const focused = tabOrder.findIndex((t) => document.activeElement?.id === `tab-${t}`);
+    const i = focused >= 0 ? focused : tabOrder.indexOf(tab);
     const next = e.key === "Home" ? 0 : e.key === "End" ? tabOrder.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + tabOrder.length) % tabOrder.length;
     e.preventDefault();
     pickTab(tabOrder[next]);
@@ -290,42 +299,59 @@ function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monito
             })}
           {order && monitor && <span className="h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />}
           {monitor && (
-            <button
-              role="tab"
-              id="tab-pkyb"
-              aria-selected={onPkyb}
-              aria-controls="pkyb-panel"
-              tabIndex={onPkyb ? 0 : -1}
-              onClick={() => pickTab("pkyb")}
-              className={cx(
-                "inline-flex h-8 items-center gap-2 rounded-[4px] border pr-3 pl-3 text-[13px] font-semibold transition-colors max-sm:h-10",
-                onPkyb
-                  ? "border-portal-pill-selected bg-portal-pill-selected text-white"
-                  : "border-border-accent bg-interactive-accent text-interactive-control hover:border-interactive-primary hover:bg-interactive-accent-hover",
-              )}
-            >
-              <Eye className={cx("size-4", onPkyb ? "text-white" : "text-interactive-primary")} aria-hidden />
-              pKYB Monitoring
-              <span className={cx("inline-flex items-center gap-1.5 border-l pl-2 text-[12px] font-medium", onPkyb ? "border-white/30 text-white/85" : "border-border-accent text-interactive-primary")}>
-                <span
+            <Hint text={NOT_OWN_MONITOR} off={ownMonitor} className={ownMonitor ? undefined : "cursor-not-allowed"}>
+              {(describedBy) => (
+                <button
+                  role="tab"
+                  id="tab-pkyb"
+                  aria-selected={onPkyb}
+                  aria-controls={ownMonitor ? "pkyb-panel" : undefined}
+                  aria-disabled={ownMonitor ? undefined : "true"}
+                  aria-describedby={describedBy}
+                  tabIndex={onPkyb ? 0 : -1}
+                  onClick={() => pickTab("pkyb")}
                   className={cx(
-                    "size-1.5 rounded-full",
-                    monitoring ? (onPkyb ? "bg-chrome-accent" : "bg-interactive-primary") : onPkyb ? "bg-white/60" : "bg-content-tertiary",
+                    "inline-flex h-8 items-center gap-2 rounded-[4px] border pr-3 pl-3 text-[13px] font-semibold transition-colors max-sm:h-10",
+                    onPkyb
+                      ? "border-portal-pill-selected bg-portal-pill-selected text-white"
+                      : "border-border-accent bg-interactive-accent text-interactive-control hover:border-interactive-primary hover:bg-interactive-accent-hover",
+                    !ownMonitor && "pointer-events-none opacity-50",
                   )}
-                  aria-hidden
-                />
-                {STATUS_COPY[monitor.status].label}
-              </span>
-            </button>
+                >
+                  <Eye className={cx("size-4", onPkyb ? "text-white" : "text-interactive-primary")} aria-hidden />
+                  pKYB Monitoring
+                  <span className={cx("inline-flex items-center gap-1.5 border-l pl-2 text-[12px] font-medium", onPkyb ? "border-white/30 text-white/85" : "border-border-accent text-interactive-primary")}>
+                    <span
+                      className={cx(
+                        "size-1.5 rounded-full",
+                        monitoring ? (onPkyb ? "bg-chrome-accent" : "bg-interactive-primary") : onPkyb ? "bg-white/60" : "bg-content-tertiary",
+                      )}
+                      aria-hidden
+                    />
+                    {STATUS_COPY[monitor.status].label}
+                  </span>
+                </button>
+              )}
+            </Hint>
           )}
         </div>
         {/* No running monitor on this company: offer one, confirmed in the order dialog (Version B) that prices the monitor and its KYB Basic baseline. */}
         {canCreate && (
           <>
             {order && <span className="h-5 w-px bg-border-neutral max-sm:hidden" aria-hidden />}
-            <Button variant="secondary" size="sm" onClick={() => setCreating(asCompany)}>
-              <Eye className="size-4" aria-hidden /> Create pKYB
-            </Button>
+            {ownReport ? (
+              <Button variant="secondary" size="sm" onClick={() => setCreating(asCompany)}>
+                <Eye className="size-4" aria-hidden /> Create pKYB
+              </Button>
+            ) : (
+              <Hint text={NOT_OWN_REPORT} className="cursor-not-allowed">
+                {(describedBy) => (
+                  <Button variant="secondary" size="sm" aria-disabled="true" aria-describedby={describedBy}>
+                    <Eye className="size-4" aria-hidden /> Create pKYB
+                  </Button>
+                )}
+              </Hint>
+            )}
           </>
         )}
       </div>
@@ -473,7 +499,7 @@ function Report({ m, order, monitor }: { m: Subject; order?: ReportOrder; monito
                 </ReportSection>
               )}
               {page === 2 && <PageTwo m={m} facts={facts} reportName={reportName} screened={order.aml || order.type === "complete"} />}
-              {page === 3 && <PageThree m={m} facts={facts} tracked={!!order.monitorId && monitoring} />}
+              {page === 3 && <PageThree m={m} facts={facts} tracked={!!order.monitorId && monitoring && ownMonitor} />}
 
               <div className="mt-10 flex items-center justify-between border-t border-border-subtle pt-3">
                 <button

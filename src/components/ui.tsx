@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
+import { forwardRef, useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import * as Flags from "country-flag-icons/react/3x2";
 import {
@@ -60,6 +60,8 @@ export const Button = forwardRef<HTMLButtonElement, BtnProps>(function Button(
       ref={ref}
       className={cx(
         "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[4px] font-semibold whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+        // Unavailable but still focusable, so a Hint can say why: looks disabled, and takes no pointer input.
+        "aria-disabled:pointer-events-none aria-disabled:opacity-50",
         variant === "link"
           ? size === "md"
             ? "text-[14px]"
@@ -174,6 +176,62 @@ export function Flag({ code, className }: { code: string; className?: string }) 
     <span className={cx("inline-flex overflow-hidden rounded-[2px] shadow-[0_0_0_1px_var(--color-background-overlay)]", className ?? "h-3 w-[18px]")}>
       <F title={jurisdictionByCode[code]?.name} className="h-full w-full" />
     </span>
+  );
+}
+
+/**
+ * A one-line note above its trigger, shown on hover or keyboard focus: why a control is unavailable, say. The note is
+ * fixed-positioned in a portal, so a scrolling table can't clip it, and it stays inside the viewport near an edge.
+ * The trigger takes `describedBy` as its `aria-describedby`. `off` keeps the trigger in the same place in the tree
+ * with no note, for a control that is only sometimes unavailable.
+ */
+export function Hint({ text, off, className, children }: { text: string; off?: boolean; className?: string; children: (describedBy: string | undefined) => ReactNode }) {
+  const id = useId();
+  const tip = useRef<HTMLSpanElement>(null);
+  const [at, setAt] = useState<{ top: number; x: number } | null>(null);
+  const show = (el: HTMLElement) => {
+    if (off) return;
+    const r = el.getBoundingClientRect();
+    setAt({ top: r.top - 6, x: r.left + r.width / 2 });
+  };
+  const hide = () => setAt(null);
+  useLayoutEffect(() => {
+    const el = tip.current;
+    if (!el || !at) return;
+    const half = el.offsetWidth / 2;
+    el.style.left = `${Math.min(window.innerWidth - 8 - half, Math.max(8 + half, at.x))}px`;
+  }, [at]);
+  // The note is pinned to where the trigger was, so it goes as soon as anything scrolls.
+  useEffect(() => {
+    if (!at) return;
+    window.addEventListener("scroll", hide, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", hide, { capture: true });
+  }, [at]);
+  return (
+    <>
+      <span
+        className={cx("inline-flex", className)}
+        onMouseEnter={(e) => show(e.currentTarget)}
+        onMouseLeave={hide}
+        onFocus={(e) => e.target.matches(":focus-visible") && show(e.currentTarget)}
+        onBlur={hide}
+      >
+        {children(off ? undefined : id)}
+      </span>
+      {!off &&
+        createPortal(
+        <span
+          id={id}
+          role="tooltip"
+          hidden={!at}
+          style={at ? { top: at.top, left: at.x } : undefined}
+          className="pointer-events-none fixed z-50 w-max max-w-[260px] -translate-x-1/2 -translate-y-full rounded-[4px] bg-background-demoted px-3 py-2 text-[12px] leading-snug font-normal text-white shadow-pop"
+        >
+          {text}
+        </span>,
+        document.body,
+      )}
+    </>
   );
 }
 

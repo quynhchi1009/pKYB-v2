@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Download, LoaderCircle, Eye, Search } from "lucide-react";
 import {
   JURISDICTIONS,
+  NOT_OWN_MONITOR,
+  NOT_OWN_REPORT,
   PKYB_UNSUPPORTED,
   REPORT_STATUS_COPY,
   REPORT_TYPES,
@@ -10,6 +12,7 @@ import {
   TODAY,
   addDays,
   iso,
+  isOwnReport,
   jurisdictionByCode,
   type Company,
   type ReportOrder,
@@ -17,7 +20,7 @@ import {
   type ReportType,
 } from "../data/model";
 import { useStore } from "../state/store";
-import { Button, Flag, cx, formatDate, nf } from "../components/ui";
+import { Button, Flag, Hint, cx, formatDate, nf } from "../components/ui";
 import { CreateMonitorDialog } from "../components/CreateMonitorDialog";
 
 const STATUSES: ReportStatus[] = ["completed", "processing", "unfulfilled"];
@@ -415,17 +418,44 @@ function AddOns({ o, compact, pkyb, onCreatePkyb, onAddAml }: { o: ReportOrder; 
   return (
     <span className={cx("flex gap-x-3 gap-y-1", compact ? "flex-row flex-wrap" : "flex-col items-start")}>
       {o.aml && <span className="font-medium">AML</span>}
-      {o.monitorId && (
-        <Link to={`/reports/${o.id}?tab=pkyb`} className="inline-flex items-center gap-1 font-semibold whitespace-nowrap text-content-link hover:underline">
-          <Eye className="size-3.5 text-interactive-primary" aria-hidden />
-          pKYB
-        </Link>
-      )}
-      {pkyb && (
-        <button onClick={onCreatePkyb} aria-label={`Create pKYB monitor for ${o.companyName}`} className="inline-flex items-center gap-1 font-semibold whitespace-nowrap text-interactive-primary hover:underline">
-          Create pKYB
-        </button>
-      )}
+      {o.monitorId &&
+        // This row is the monitor's baseline, so whoever generated it created the monitor.
+        (isOwnReport(o) ? (
+          <Link to={`/reports/${o.id}?tab=pkyb`} className="inline-flex items-center gap-1 font-semibold whitespace-nowrap text-content-link hover:underline">
+            <Eye className="size-3.5 text-interactive-primary" aria-hidden />
+            pKYB
+          </Link>
+        ) : (
+          <Hint text={NOT_OWN_MONITOR} className="cursor-not-allowed">
+            {(describedBy) => (
+              <a role="link" tabIndex={0} aria-disabled="true" aria-describedby={describedBy} className="pointer-events-none inline-flex items-center gap-1 font-semibold whitespace-nowrap text-content-link opacity-50">
+                <Eye className="size-3.5 text-interactive-primary" aria-hidden />
+                pKYB
+              </a>
+            )}
+          </Hint>
+        ))}
+      {pkyb &&
+        (isOwnReport(o) ? (
+          <button onClick={onCreatePkyb} aria-label={`Create pKYB monitor for ${o.companyName}`} className="inline-flex items-center gap-1 font-semibold whitespace-nowrap text-interactive-primary hover:underline">
+            Create pKYB
+          </button>
+        ) : (
+          // A teammate's report: the entry point stays in place, unavailable, and says why on hover or focus.
+          <Hint text={NOT_OWN_REPORT} className="cursor-not-allowed">
+            {(describedBy) => (
+              <button
+                type="button"
+                aria-disabled="true"
+                aria-label={`Create pKYB monitor for ${o.companyName}`}
+                aria-describedby={describedBy}
+                className="pointer-events-none inline-flex items-center gap-1 font-semibold whitespace-nowrap text-interactive-primary opacity-50"
+              >
+                Create pKYB
+              </button>
+            )}
+          </Hint>
+        ))}
       {canAddAml && (
         <button onClick={onAddAml} className="font-semibold whitespace-nowrap text-interactive-primary hover:underline">
           Add AML
