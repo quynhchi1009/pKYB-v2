@@ -46,9 +46,6 @@ function initialScope(): Scope {
 /** With no severity, every change reads the same. Medium is the amber tier, so it stands in as the one "change" colour. */
 const FLAT_SEVERITY = Object.fromEntries(CATEGORIES.map((c) => [c, "medium"])) as SeverityMap;
 
-/** What the simple version asks the team for: two switches, both on until someone turns them off. */
-export type SimplePrefs = { inApp: boolean; weeklyDigest: boolean };
-
 
 /** Who changed the org-wide severity mapping last, and what they changed. */
 export type SeverityChange = { summary: string; by: string; at: string };
@@ -81,8 +78,6 @@ type Store = {
   setScope: (s: Scope) => void;
   /** True in the version without severity and severity-based alerts. */
   simple: boolean;
-  simplePrefs: SimplePrefs;
-  saveSimplePrefs: (p: SimplePrefs) => void;
   /** The saved mapping every view colours by. In the simple version every category reads as Medium, whatever the team saved. */
   severity: SeverityMap;
   /** Replaces the whole mapping and records who changed it, so the page can show attribution. */
@@ -125,7 +120,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [reportOrders, setReportOrders] = useState<ReportOrder[]>(() => generateReportOrders(monitors));
   const [severityMap, setSeverityMap] = useState<SeverityMap>(DEMO_ORG_SEVERITY);
   const [scope, setScopeState] = useState<Scope>(initialScope);
-  const [simplePrefs, setSimplePrefs] = useState<SimplePrefs>({ inApp: true, weeklyDigest: true });
   const setScope = useCallback((s: Scope) => {
     setScopeState(s);
     try {
@@ -280,8 +274,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       scope,
       setScope,
       simple,
-      simplePrefs,
-      saveSimplePrefs: setSimplePrefs,
       severity,
       saveSeverity: (map, summary) => {
         setSeverityMap(map);
@@ -332,7 +324,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     scope,
     setScope,
     simple,
-    simplePrefs,
     severity,
     severityChange,
     prefs,

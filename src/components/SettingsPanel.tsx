@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Bell, Check, ChevronDown, Mail, RotateCcw, Settings, SlidersHorizontal, X } from "lucide-react";
 import { CATEGORIES, CATEGORY_LABEL, DEFAULT_SEVERITY, RECENT_DAYS, SEVERITIES, SEVERITY_LABEL, TODAY, addDays, iso, isRecent, worstSeverity, type Monitor, type Severity, type SeverityMap } from "../data/model";
 import { buildRow } from "../data/queue";
-import { useStore, type NotifyPrefs, type SimplePrefs } from "../state/store";
+import { useStore, type NotifyPrefs } from "../state/store";
 import { Button, CATEGORY_ICON, ChangeChips, Dialog, SEV_STYLE, cx, formatDate, nf } from "./ui";
 
 export type SettingsSection = "severity" | "notifications";
@@ -474,95 +474,58 @@ function SectionIntro({ title, children }: { title: string; children: ReactNode 
   );
 }
 
-/* ---------------------------------------------------------------- without severity: two switches and a digest preview */
+/* ---------------------------------------------------------------- without severity: how changes reach you, read-only */
 
-function useSimpleDraft() {
-  const { simplePrefs, saveSimplePrefs, toast } = useStore();
-  const [draft, setDraft] = useState<SimplePrefs>(simplePrefs);
-  useEffect(() => setDraft(simplePrefs), [simplePrefs]);
-  const inAppMoved = draft.inApp !== simplePrefs.inApp;
-  const digestMoved = draft.weeklyDigest !== simplePrefs.weeklyDigest;
-  const pending = Number(inAppMoved) + Number(digestMoved);
-  const details: string[] = [];
-  if (inAppMoved) details.push(`in-app notifications ${draft.inApp ? "on" : "off"}`);
-  if (digestMoved) details.push(`weekly digest ${draft.weeklyDigest ? "on" : "off"}`);
-  const discard = () => setDraft(simplePrefs);
-  const save = () => {
-    const prev = simplePrefs;
-    saveSimplePrefs(draft);
-    toast({ title: "Notification settings saved", action: { label: "Undo", onClick: () => saveSimplePrefs(prev) } });
-  };
-  return { simplePrefs, draft, setDraft, pending, details, discard, save };
-}
-
-const SIMPLE_ROWS: Array<{ key: keyof SimplePrefs; icon: typeof Bell; title: string; desc: string }> = [
-  { key: "inApp", icon: Bell, title: "In-app notifications", desc: "A notification in the bell for every change recorded on a company you monitor." },
-  { key: "weeklyDigest", icon: Mail, title: "Weekly email digest", desc: "One email a week that lists every change recorded, whatever its type." },
+const SIMPLE_ROWS: Array<{ icon: typeof Bell; title: string; desc: string }> = [
+  { icon: Bell, title: "In-app notifications", desc: "A notification in the bell for every change recorded on a company you monitor." },
+  { icon: Mail, title: "Weekly email digest", desc: "One email a week that lists every change recorded, whatever its type." },
 ];
 
-/** Without severity there is nothing to grade: one yellow for every change, and two switches for how it reaches you. */
+/**
+ * Without severity there is nothing to grade, and neither channel can be turned off yet. So this only explains how
+ * changes reach you and previews the weekly email: no switches, nothing to save, and Close is the one way out.
+ */
 function SimpleSettings({ onClose }: { onClose: () => void }) {
-  const d = useSimpleDraft();
-  const { asking, setAsking, requestClose } = useCloseGuard(d, onClose);
-  const id = useId();
   return (
-    <Dialog open onClose={requestClose} title={SIMPLE_SETTINGS_NAME} labelledBy="settings-title" width={640} bare>
+    <Dialog open onClose={onClose} title={SIMPLE_SETTINGS_NAME} labelledBy="settings-title" width={640} bare>
       <div className="flex max-h-[min(700px,calc(100dvh-32px))] flex-col">
         <header className="flex items-start justify-between gap-4 border-b border-border-subtle px-5 pt-5 pb-4 sm:px-6">
           <div>
             <h2 id="settings-title" className="text-[18px] leading-snug font-semibold">
               {SIMPLE_SETTINGS_NAME}
             </h2>
-            <p className="mt-0.5 text-[13px] text-content-main">Choose how you're told about changes on the companies you monitor.</p>
+            <p className="mt-0.5 text-[13px] text-content-main">How you're told about changes on the companies you monitor.</p>
           </div>
-          <button onClick={requestClose} aria-label="Close settings" className="-mr-2 grid size-8 shrink-0 place-items-center rounded-[4px] text-content-tertiary hover:bg-background-subtle hover:text-content-primary">
+          <button onClick={onClose} aria-label="Close notifications" className="-mr-2 grid size-8 shrink-0 place-items-center rounded-[4px] text-content-tertiary hover:bg-background-subtle hover:text-content-primary">
             <X className="size-4" />
           </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
           <SectionIntro title="How changes reach you">
-            Every change recorded on a company you monitor is marked in yellow. There is no severity to set; choose whether changes also reach you in the app and by email.
+            Every change recorded on a company you monitor is marked in yellow. There is no severity to set: each change reaches you in the app and in a weekly email.
           </SectionIntro>
           <ul className="divide-y divide-border-subtle overflow-hidden rounded-[6px] border border-border-subtle bg-white">
-            {SIMPLE_ROWS.map((r) => {
-              const on = d.draft[r.key];
-              const unsaved = on !== d.simplePrefs[r.key];
-              return (
-                <li key={r.key} className={cx("flex items-center gap-4 px-4 py-3.5", unsaved && "bg-interactive-selected")}>
-                  <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-interactive-accent text-interactive-control">
-                    <r.icon className="size-[18px]" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span id={`${id}-${r.key}`} className="block text-[14px] font-semibold text-content-primary">
-                      {r.title}
-                    </span>
-                    <span id={`${id}-${r.key}-d`} className="block text-[12px] text-content-tertiary">
-                      {r.desc}
-                      {unsaved && <span className="font-semibold text-interactive-control"> · Unsaved</span>}
-                    </span>
-                  </span>
-                  <button
-                    role="switch"
-                    aria-checked={on}
-                    aria-labelledby={`${id}-${r.key}`}
-                    aria-describedby={`${id}-${r.key}-d`}
-                    onClick={() => d.setDraft((p) => ({ ...p, [r.key]: !p[r.key] }))}
-                    className={cx(
-                      "relative h-6 w-11 shrink-0 rounded-full transition-colors max-sm:h-7 max-sm:w-12",
-                      on ? "bg-interactive-primary" : "bg-interactive-secondary",
-                    )}
-                  >
-                    <span aria-hidden className={cx("absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow-sm transition-transform duration-150 max-sm:size-6", on && "translate-x-5 max-sm:translate-x-5")} />
-                  </button>
-                </li>
-              );
-            })}
+            {SIMPLE_ROWS.map((r) => (
+              <li key={r.title} className="flex items-center gap-4 px-4 py-3.5">
+                <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-interactive-accent text-interactive-control">
+                  <r.icon className="size-[18px]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-semibold text-content-primary">{r.title}</span>
+                  <span className="block text-[12px] text-content-tertiary">{r.desc}</span>
+                </span>
+              </li>
+            ))}
           </ul>
-          <DigestPreview on={d.draft.weeklyDigest} />
+          <DigestPreview />
         </div>
 
-        <SaveFooter d={d} asking={asking} setAsking={setAsking} onClose={onClose} secondary={{ label: "Cancel", onClick: requestClose }} />
+        <div className="flex items-center justify-end border-t border-border-subtle bg-base-contrast px-5 py-3.5 sm:px-6">
+          <Button variant="primary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
       </div>
     </Dialog>
   );
@@ -572,7 +535,7 @@ type DigestRow = { id: string; name: string; date: string; categories: Monitor["
 const DIGEST_ROWS = 4;
 
 /** The weekly email, drawn from the last seven days of recorded changes (or the last 30 when the week was quiet). One list, no severity. */
-function DigestPreview({ on }: { on: boolean }) {
+function DigestPreview() {
   const { monitors } = useStore();
   const { rows, companies, quiet } = useMemo(() => {
     const all: DigestRow[] = [];
@@ -593,10 +556,10 @@ function DigestPreview({ on }: { on: boolean }) {
         Weekly digest preview
       </h3>
       <p className="mt-0.5 text-[12px] text-content-tertiary">
-        {on ? "Sent once a week with every change recorded." : "Off. Turn the weekly email digest on to receive it."}
+        Sent once a week with every change recorded.
         {quiet && rows.length > 0 && ` Sample from the last ${RECENT_DAYS} days.`}
       </p>
-      <div className={cx("mt-3 overflow-hidden rounded-[6px] border border-border-subtle bg-white transition-opacity", !on && "opacity-60")}>
+      <div className="mt-3 overflow-hidden rounded-[6px] border border-border-subtle bg-white">
         <div className="border-b border-border-subtle bg-background-subtle px-4 py-3">
           <p className="text-[11px] font-semibold tracking-[0.04em] text-content-tertiary uppercase">Subject</p>
           <p className="text-[13px] font-semibold text-content-primary tnum">

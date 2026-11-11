@@ -80,8 +80,11 @@ export const JURISDICTIONS: Jurisdiction[] = [
   { code: "MY", name: "Malaysia", regLabel: "SSM No." },
   { code: "TW", name: "Taiwan", regLabel: "Unified Business No." },
 ];
-// Demo assumption: pKYB is not yet available in Taiwan, to show the blocked path. Replace with the real coverage list.
-export const PKYB_UNSUPPORTED = new Set(["TW"]);
+// Demo assumption: pKYB is not yet available in Taiwan or Malaysia, so a company there can be searched and ordered a
+// KYB report on, but not monitored. Replace with the real coverage list.
+export const PKYB_UNSUPPORTED = new Set(["TW", "MY"]);
+/** Where pKYB runs. Monitors, and the filters that slice them, only ever span these: nothing is monitored elsewhere. */
+export const PKYB_JURISDICTIONS = JURISDICTIONS.filter((j) => !PKYB_UNSUPPORTED.has(j.code));
 
 export const jurisdictionByCode = Object.fromEntries(JURISDICTIONS.map((j) => [j.code, j])) as Record<
   string,
@@ -369,7 +372,7 @@ export function generateMonitors(): Monitor[] {
     if (i < FIGMA_COMPANIES.length) {
       [name, code, localName] = FIGMA_COMPANIES[i];
     } else {
-      code = JURISDICTIONS[Math.floor(r() * JURISDICTIONS.length)].code;
+      code = PKYB_JURISDICTIONS[Math.floor(r() * PKYB_JURISDICTIONS.length)].code;
       do {
         const sfx = SUFFIX[code][Math.floor(r() * 2)];
         name = `${A[Math.floor(r() * A.length)]} ${B[Math.floor(r() * B.length)]} ${sfx}`;

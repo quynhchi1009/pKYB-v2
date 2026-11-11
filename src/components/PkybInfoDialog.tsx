@@ -99,16 +99,22 @@ export function PkybInfoDialog({
         <div>
           <dt className="text-[12px] font-semibold text-content-main">{simple ? "Notifications" : "Severity"}</dt>
           <dd className="mt-0.5 text-content-primary">
-            {simple ? "Every change is marked in yellow. " : customised ? "Your team's settings apply. " : "Every category starts at Medium. "}
-            <button
-              onClick={() => {
-                onClose();
-                openSettings(simple ? "notifications" : "severity");
-              }}
-              className="font-semibold text-content-link hover:underline"
-            >
-              {simple ? "Notifications" : "Severity & alerts"}
-            </button>
+            {simple ? (
+              "Every change is marked in yellow, and reaches you in-app and in a weekly email."
+            ) : (
+              <>
+                {customised ? "Your team's settings apply. " : "Every category starts at Medium. "}
+                <button
+                  onClick={() => {
+                    onClose();
+                    openSettings("severity");
+                  }}
+                  className="font-semibold text-content-link hover:underline"
+                >
+                  Severity & alerts
+                </button>
+              </>
+            )}
           </dd>
         </div>
         <div>

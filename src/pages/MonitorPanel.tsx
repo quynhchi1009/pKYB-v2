@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, FilePlus2, LoaderCircle, Eye, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CirclePause, CircleStop, Download, FileCheck2, FilePlus2, LoaderCircle, Eye, SlidersHorizontal, X } from "lucide-react";
 import { PRICING, STATUS_COPY, SEVERITY_LABEL, SEVERITY_RANK, TODAY, addDays, iso, worstSeverity, type Company, type Monitor, type Severity } from "../data/model";
 import { useStore } from "../state/store";
 import { Heatmap } from "../components/Heatmap";
@@ -217,11 +217,8 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                     );
                   })}
                 </ul>
-                {simple ? (
-                  <button onClick={() => openSettings("notifications")} className="mt-3 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
-                    <Bell className="size-3.5" /> Notification settings
-                  </button>
-                ) : (
+                {/* Without severity there is nothing to adjust, so the rail ends at the mix. */}
+                {!simple && (
                   <button onClick={() => openSettings("severity")} className="mt-3 -ml-1 inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-semibold text-content-link hover:underline">
                     <SlidersHorizontal className="size-3.5" /> Adjust severity
                   </button>
@@ -320,13 +317,18 @@ export function MonitorPanel({ m, onViewBaseline }: { m: Monitor; onViewBaseline
                         </div>
                         <p className="mx-auto mt-2 max-w-[64ch] text-[13px] text-content-main">
                           {baselineReady ? "No changes since the baseline." : "The KYB Basic baseline report is being generated."}{" "}
-                          {simple
-                            ? "Checks run automatically. Recorded changes can notify you in-app, and a weekly digest email lists them all, based on your settings in"
-                            : "Checks run automatically, and you'll be alerted in-app and by email based on your settings in"}{" "}
-                          <button onClick={() => openSettings("notifications")} className="font-semibold text-content-link hover:underline">
-                            {simple ? "Notifications" : "Severity & alerts"}
-                          </button>
-                          . New changes will be listed here.
+                          {simple ? (
+                            "Checks run automatically. Recorded changes notify you in-app, and a weekly digest email lists them all."
+                          ) : (
+                            <>
+                              Checks run automatically, and you'll be alerted in-app and by email based on your settings in{" "}
+                              <button onClick={() => openSettings("notifications")} className="font-semibold text-content-link hover:underline">
+                                Severity & alerts
+                              </button>
+                              .
+                            </>
+                          )}{" "}
+                          New changes will be listed here.
                         </p>
                       </div>
                     </>

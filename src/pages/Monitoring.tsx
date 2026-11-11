@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUpDown, Building2, Check, ChevronLeft, ChevronRight, Ci
 import {
   CATEGORIES,
   CATEGORY_LABEL,
-  JURISDICTIONS,
+  PKYB_JURISDICTIONS,
   SEVERITIES,
   SEVERITY_LABEL,
   SEVERITY_RANK,
@@ -142,7 +142,8 @@ export function Monitoring() {
               ? `Filter active monitors. Changes detected counts companies with at least one change in the last ${RECENT_DAYS} days.`
               : `Filter active monitors. Severity counts are companies by their most severe change in the last ${RECENT_DAYS} days.`
           }
-          className="grid grid-cols-2 gap-3 @4xl:grid-cols-4 @4xl:gap-4"
+          // With severity there are four cards. Without it there are two, which share the row instead of leaving half of it empty.
+          className={cx("grid grid-cols-2 gap-3 @4xl:gap-4", !simple && "@4xl:grid-cols-4")}
         >
           <StatCard
             value={active.length}
@@ -276,7 +277,7 @@ function FilterBar({
         value={jur}
         onChange={setJur}
         className="w-[160px]"
-        options={[{ value: "all", label: "All jurisdictions" }, ...JURISDICTIONS.map((j) => ({ value: j.code, label: j.name }))]}
+        options={[{ value: "all", label: "All jurisdictions" }, ...PKYB_JURISDICTIONS.map((j) => ({ value: j.code, label: j.name }))]}
       />
       {setSev && (
         <Select
@@ -556,7 +557,7 @@ function SortTh({ label, active, title, onClick }: { label: string; active: bool
 }
 
 function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchParams; update: Update }) {
-  const { severity, prefs, simple, simplePrefs } = useStore();
+  const { severity, prefs, simple } = useStore();
   const navigate = useNavigate();
   const { q, jur, sev, cat } = normalise(filtersFromParams(params), simple);
   const range = (params.get("range") as DateRange | null) ?? "all";
@@ -583,7 +584,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
         if ((lo && e.date < lo) || (hi && e.date > hi)) continue;
         if (cat !== "all" && !e.categories.includes(cat as Category)) continue;
         const s = worstSeverity(e.categories, severity);
-        if (alertsOnly && (simple ? !simplePrefs.inApp : !prefs.inApp[s])) continue;
+        if (alertsOnly && !simple && !prefs.inApp[s]) continue;
         if (sev !== "all" && s !== sev) continue;
         out.push({ e, m, s });
       }
@@ -591,7 +592,7 @@ function ChangeFeed({ rows, params, update }: { rows: Row[]; params: URLSearchPa
     const byDate = (a: (typeof out)[number], b: (typeof out)[number]) => (a.e.date === b.e.date ? 0 : a.e.date < b.e.date ? 1 : -1);
     const bySev = (a: (typeof out)[number], b: (typeof out)[number]) => SEVERITY_RANK[b.s] - SEVERITY_RANK[a.s];
     return out.sort((a, b) => (sort === "date" ? byDate(a, b) || bySev(a, b) : bySev(a, b) || byDate(a, b)));
-  }, [rows, q, jur, sev, cat, range, from, to, sort, severity, alertsOnly, prefs, simple, simplePrefs]);
+  }, [rows, q, jur, sev, cat, range, from, to, sort, severity, alertsOnly, prefs, simple]);
 
   const open = (id: string) => navigate(`/reports/${id}?tab=pkyb`, { state: { from: "monitoring" } });
   const slice = events.slice(page * PAGE, (page + 1) * PAGE);

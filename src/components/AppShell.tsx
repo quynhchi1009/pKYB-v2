@@ -55,7 +55,7 @@ const joinNames = (names: string[]) => (names.length < 2 ? names.join("") : `${n
 
 /** Portal2's notifications popover: Refresh and Clear all in the header, a list of icon rows, dismissed one by one. */
 function NotificationBell() {
-  const { monitors, severity, prefs, simple, simplePrefs } = useStore();
+  const { monitors, severity, prefs, simple } = useStore();
   const [open, setOpen] = useState(false);
   const [cleared, setCleared] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,13 +67,13 @@ function NotificationBell() {
       for (const e of m.events) {
         if (!isRecent(e)) continue;
         const sev = worstSeverity(e.categories, severity);
-        // Without severity there is one switch for in-app notifications; with it, one per severity.
-        if (simple ? !simplePrefs.inApp : !prefs.inApp[sev]) continue;
+        // Without severity every change notifies in-app; with it, only the severities the team switched on.
+        if (!simple && !prefs.inApp[sev]) continue;
         out.push({ id: e.id, monitorId: m.id, name: m.name, date: e.date, sev, changed: joinNames(e.categories.map((c) => CATEGORY_LABEL[c])) });
       }
     }
     return out.sort((a, b) => (a.date === b.date ? SEVERITY_RANK[b.sev] - SEVERITY_RANK[a.sev] : a.date < b.date ? 1 : -1));
-  }, [monitors, severity, prefs, simple, simplePrefs]);
+  }, [monitors, severity, prefs, simple]);
   // Clearing empties the bell, not the change feed: the changes themselves stay on record.
   const items = all.filter((n) => !cleared.includes(n.id));
 
@@ -145,9 +145,7 @@ function NotificationBell() {
                     {cleared.length > 0
                       ? "You're all caught up. Cleared alerts stay in the change feed."
                       : simple
-                        ? simplePrefs.inApp
-                          ? `No changes recorded in the last ${RECENT_DAYS} days.`
-                          : "In-app notifications are off. Turn them on in Notifications settings."
+                        ? `No changes recorded in the last ${RECENT_DAYS} days.`
                         : `No alerts in the last ${RECENT_DAYS} days at the severities you chose in Severity & alerts.`}
                   </li>
                 )}
