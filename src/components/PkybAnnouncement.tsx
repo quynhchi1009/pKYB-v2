@@ -4,19 +4,21 @@ import { Bell, Eye, Gem, List, RotateCcw, Search, ShoppingCart, X } from "lucide
 import { PRICING } from "../data/model";
 import { Button, Dialog, NewTag, cx } from "./ui";
 
-/* The launch announcement: shown on login until it is dismissed for the session. Add ?announcement to any
-   URL to see it again. */
+/* The launch announcement: shown on login until it is dismissed for the session, or for good once "Don't show this
+   again" is ticked. Add ?announcement to any URL to see it again either way. */
 const SEEN_KEY = "pkyb-announcement-seen";
+const MUTED_KEY = "pkyb-announcement-muted";
 const wasSeen = () => {
   try {
-    return sessionStorage.getItem(SEEN_KEY) === "1";
+    return sessionStorage.getItem(SEEN_KEY) === "1" || localStorage.getItem(MUTED_KEY) === "1";
   } catch {
     return false;
   }
 };
-const markSeen = () => {
+const markSeen = (forever: boolean) => {
   try {
     sessionStorage.setItem(SEEN_KEY, "1");
+    if (forever) localStorage.setItem(MUTED_KEY, "1");
   } catch {
     /* A blocked store only means it shows again next load. */
   }
@@ -25,8 +27,10 @@ const markSeen = () => {
 export function AnnouncementHost() {
   const [params] = useSearchParams();
   const [open, setOpen] = useState(() => params.has("announcement") || !wasSeen());
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+  // Every way out (Got it, the close button, Escape, the backdrop) honours the checkbox.
   const close = () => {
-    markSeen();
+    markSeen(dontShowAgain);
     setOpen(false);
   };
 
@@ -49,7 +53,11 @@ export function AnnouncementHost() {
               <span className="font-semibold text-content-primary">Add pKYB monitoring</span> in Your Report. It costs <span className="tnum">{PRICING.monitorCredits}</span> credits per company per year, on top of the report.
             </span>
           </p>
-          <div className="mt-6 flex flex-col sm:flex-row sm:justify-end">
+          <div className="mt-6 flex items-center justify-between gap-4">
+            <label className="inline-flex min-h-9 cursor-pointer items-center gap-2 text-[13px] text-content-main select-none max-sm:min-h-11">
+              <input type="checkbox" checked={dontShowAgain} onChange={(e) => setDontShowAgain(e.target.checked)} className="size-4 shrink-0 cursor-pointer accent-interactive-primary" />
+              Don&rsquo;t show this again
+            </label>
             <Button variant="primary" data-autofocus="" onClick={close}>
               Got it
             </Button>
