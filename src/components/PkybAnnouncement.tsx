@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Bell, Eye, Gem, List, RotateCcw, Search, ShoppingCart, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Bell, Eye, Gem, List, RotateCcw, Search, ShoppingCart, X } from "lucide-react";
 import { PRICING } from "../data/model";
 import { Button, Dialog, NewTag, cx } from "./ui";
 
@@ -24,7 +24,6 @@ const markSeen = () => {
 
 export function AnnouncementHost() {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(() => params.has("announcement") || !wasSeen());
   const close = () => {
     markSeen();
@@ -50,19 +49,9 @@ export function AnnouncementHost() {
               <span className="font-semibold text-content-primary">Add pKYB monitoring</span> in Your Report. It costs <span className="tnum">{PRICING.monitorCredits}</span> credits per company per year, on top of the report.
             </span>
           </p>
-          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={close}>
+          <div className="mt-6 flex flex-col sm:flex-row sm:justify-end">
+            <Button variant="primary" data-autofocus="" onClick={close}>
               Got it
-            </Button>
-            <Button
-              variant="primary"
-              data-autofocus=""
-              onClick={() => {
-                close();
-                navigate("/search?from=pkyb");
-              }}
-            >
-              Search for a company <ArrowRight className="size-4" aria-hidden />
             </Button>
           </div>
         </div>

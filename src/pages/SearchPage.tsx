@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ChevronDown, Eye, Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { JURISDICTIONS, SEARCH_COMPANIES } from "../data/model";
 import { Button } from "../components/ui";
 
@@ -9,7 +9,6 @@ export function SearchPage() {
   const q = params.get("q") ?? "Shenzhen";
   const [draft, setDraft] = useState(q);
   const [jur, setJur] = useState("all");
-  const fromPkyb = params.get("from") === "pkyb";
 
   const results = useMemo(
     () => SEARCH_COMPANIES.filter((c) => (c.name + (c.localName ?? "") + c.regNo).toLowerCase().includes(q.toLowerCase()) && (jur === "all" || c.jurisdiction === jur)),
@@ -18,14 +17,6 @@ export function SearchPage() {
 
   return (
     <div className="px-4 pt-6 pb-16 sm:px-6 lg:px-8">
-      {fromPkyb && (
-        <div className="mb-4 flex items-center gap-3 rounded-[6px] border border-border-accent bg-interactive-accent px-4 py-3 text-[13px] text-interactive-control">
-          <Eye className="size-4 shrink-0" />
-          <span>
-            Find the company you want to monitor and choose <span className="font-semibold">View</span>. Pick KYB Basic, then add pKYB monitoring in <span className="font-semibold">Your Report</span>.
-          </span>
-        </div>
-      )}
       {/* Portal2 search: one off-white panel holding the form, a hairline, then the results table. */}
       <div className="rounded-[8px] bg-background-elevated px-4 pt-7 pb-6 sm:px-5">
         <form
